@@ -1,0 +1,472 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum Role {
+  ADMIN
+  DEPARTMENT_HEAD
+  WORKGROUP_HEAD
+  OPERATOR
+}
+
+// ==================== MODELS ====================
+
+model User {
+  id              String   @id @default(cuid())
+  username        String   @unique
+  hashedPassword  String
+  name            String
+  role            Role     @default(OPERATOR)
+  
+  // Relations
+  departmentId    String?
+  department      Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  
+  workgroupId     String?
+  workgroup       Workgroup?  @relation(fields: [workgroupId], references: [id], onDelete: SetNull)
+  
+  entries         ProcurementPlanEntry[] @relation("PlanEntryCreatedBy")
+  updatedEntries  ProcurementPlanEntry[] @relation("PlanEntryUpdatedBy")
+  monthlyProgress MonthlyProgress[]
+  quarterlySummaries QuarterlySummary[]
+  budgetAllocations BudgetAllocation[]
+  auditLogs       AuditLog[]
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  // Indexes
+  @@index([departmentId])
+  @@index([workgroupId])
+  @@index([role])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model Department {
+  id              String     @id @default(cuid())
+  name            String     @unique
+  code            String?    @unique
+  description     String?
+  
+  // Relations
+  users           User[]
+  workgroups      Workgroup[]
+  budgetAllocations BudgetAllocation[]
+  quarterlySummaries QuarterlySummary[]
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("departments")
+}
+
+model Workgroup {
+  id              String     @id @default(cuid())
+  name            String
+  code            String?
+  description     String?
+  
+  // Relations
+  departmentId    String
+  department      Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  
+  users           User[]
+  items           ProcurementItem[]
+  budgetAllocations BudgetAllocation[]
+  quarterlySummaries QuarterlySummary[]
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Indexes
+  @@index([departmentId])
+  @@unique([departmentId, name])
+  @@map("workgroups")
+}
+
+model ProcurementItem {
+  id              String   @id @default(cuid())
+  itemCode        String   @unique
+  itemName        String
+  unitName        String
+  unitPrice       Decimal
+  isActive        Boolean  @default(true)
+  description     String?
+  
+  // Relations
+  workgroupId     String
+  workgroup       Workgroup @relation(fields: [workgroupId], references: [id], onDelete: Cascade)
+  
+  planEntries     ProcurementPlanEntry[]
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Indexes
+  @@index([workgroupId])
+  @@index([itemCode])
+  @@index([isActive])
+  @@map("procurement_items")
+}
+
+// ==================== UPDATED PROCUREMENT PLAN WITH TARGETS ====================
+
+model ProcurementPlanEntry {
+  id              String   @id @default(cuid())
+  fiscalYear      Int
+  
+  // จำนวนที่กรอก (Actual)
+  q1Quantity      Int      @default(0)
+  q2Quantity      Int      @default(0)
+  q3Quantity      Int      @default(0)
+  q4Quantity      Int      @default(0)
+  
+  // เป้าหมายรายไตรมาส (Target)
+  q1Target        Int      @default(0)
+  q2Target        Int      @default(0)
+  q3Target        Int      @default(0)
+  q4Target        Int      @default(0)
+  
+  // เป้าหมายรายเดือน (Monthly Targets)
+  janTarget       Int      @default(0)
+  febTarget       Int      @default(0)
+  marTarget       Int      @default(0)
+  aprTarget       Int      @default(0)
+  mayTarget       Int      @default(0)
+  junTarget       Int      @default(0)
+  julTarget       Int      @default(0)
+  augTarget       Int      @default(0)
+  sepTarget       Int      @default(0)
+  octTarget       Int      @default(0)
+  novTarget       Int      @default(0)
+  decTarget       Int      @default(0)
+  
+  // คำนวณอัตโนมัติ
+  totalQuantity   Int      @default(0)    // ผลรวมจำนวนจริง
+  totalTarget     Int      @default(0)    // ผลรวมเป้าหมาย
+  totalAmount     Decimal  @default(0)    // มูลค่ารวม (Quantity * Unit Price)
+  
+  // ความคืบหน้า
+  achievementRate Float    @default(0)    // อัตราบรรลุเป้าหมาย (%)
+  
+  // Relations
+  itemId          String
+  item            ProcurementItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  
+  createdById     String
+  createdBy       User     @relation("PlanEntryCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  
+  updatedById     String?
+  updatedBy       User?    @relation("PlanEntryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  
+  monthlyProgress MonthlyProgress[]
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Constraints & Indexes
+  @@unique([fiscalYear, itemId, createdById])
+  @@index([fiscalYear])
+  @@index([itemId])
+  @@index([createdById])
+  @@index([createdAt])
+  @@map("procurement_plan_entries")
+}
+
+// ==================== BUDGET MODELS WITH MONTHLY TARGETS ====================
+
+model BudgetYear {
+  id              String    @id @default(cuid())
+  fiscalYear      Int       @unique
+  yearName        String
+  isActive        Boolean   @default(false)
+  isLocked        Boolean   @default(false)
+  
+  // ข้อมูลงบประมาณ
+  totalBudget     Decimal   @default(0)
+  allocatedBudget Decimal   @default(0)
+  remainingBudget Decimal   @default(0)
+  
+  // เป้าหมายรายเดือน (Monthly Budget Targets)
+  janBudget       Decimal   @default(0)
+  febBudget       Decimal   @default(0)
+  marBudget       Decimal   @default(0)
+  aprBudget       Decimal   @default(0)
+  mayBudget       Decimal   @default(0)
+  junBudget       Decimal   @default(0)
+  julBudget       Decimal   @default(0)
+  augBudget       Decimal   @default(0)
+  sepBudget       Decimal   @default(0)
+  octBudget       Decimal   @default(0)
+  novBudget       Decimal   @default(0)
+  decBudget       Decimal   @default(0)
+  
+  // ความสัมพันธ์
+  budgetItems     BudgetItem[]
+  quarterlySummaries QuarterlySummary[]
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([fiscalYear])
+  @@index([isActive])
+  @@map("budget_years")
+}
+
+model BudgetItem {
+  id              String    @id @default(cuid())
+  
+  // ความสัมพันธ์กับปีงบประมาณ
+  budgetYearId    String
+  budgetYear      BudgetYear @relation(fields: [budgetYearId], references: [id], onDelete: Cascade)
+  
+  // ข้อมูลรายการ
+  itemName        String
+  itemCode        String?
+  level           Int       @default(1)
+  order           Int       @default(0)
+  isEditable      Boolean   @default(false)
+  
+  // จำนวนเงินตามปี
+  previousYearActual Decimal @default(0)
+  currentYearBudget  Decimal @default(0)
+  currentYearEstimate Decimal @default(0)
+  
+  // เป้าหมายรายไตรมาส (Quarterly Budget Targets)
+  q1BudgetTarget  Decimal   @default(0)
+  q2BudgetTarget  Decimal   @default(0)
+  q3BudgetTarget  Decimal   @default(0)
+  q4BudgetTarget  Decimal   @default(0)
+  
+  // เป้าหมายรายเดือน (Monthly Budget Targets)
+  janBudgetTarget Decimal   @default(0)
+  febBudgetTarget Decimal   @default(0)
+  marBudgetTarget Decimal   @default(0)
+  aprBudgetTarget Decimal   @default(0)
+  mayBudgetTarget Decimal   @default(0)
+  junBudgetTarget Decimal   @default(0)
+  julBudgetTarget Decimal   @default(0)
+  augBudgetTarget Decimal   @default(0)
+  sepBudgetTarget Decimal   @default(0)
+  octBudgetTarget Decimal   @default(0)
+  novBudgetTarget Decimal   @default(0)
+  decBudgetTarget Decimal   @default(0)
+  
+  // Self-relation for hierarchy
+  parentId        String?
+  parent          BudgetItem? @relation("BudgetItemHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children        BudgetItem[] @relation("BudgetItemHierarchy")
+  
+  // Relations
+  budgetAllocations BudgetAllocation[]
+  monthlyProgress MonthlyProgress[]
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Constraints
+  @@unique([budgetYearId, itemName, parentId])
+  @@index([budgetYearId])
+  @@index([parentId])
+  @@index([level])
+  @@index([order])
+  @@map("budget_items")
+}
+
+// ==================== NEW: MONTHLY PROGRESS TRACKING ====================
+
+model MonthlyProgress {
+  id              String    @id @default(cuid())
+  
+  // ความสัมพันธ์
+  planEntryId     String?
+  planEntry       ProcurementPlanEntry? @relation(fields: [planEntryId], references: [id], onDelete: Cascade)
+  
+  budgetItemId    String?
+  budgetItem      BudgetItem? @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+  
+  // ข้อมูลเดือน
+  fiscalYear      Int
+  month           Int       // 1-12 (มกราคม-ธันวาคม)
+  monthName       String    // "มกราคม", "กุมภาพันธ์", ...
+  
+  // ข้อมูลความคืบหน้า
+  targetAmount    Decimal   @default(0)    // เป้าหมายของเดือน
+  actualAmount    Decimal   @default(0)    // ผลดำเนินงานจริง
+  progressPercent Float     @default(0)    // ความคืบหน้า %
+  
+  // สถานะ
+  status          String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, DELAYED
+  notes           String?
+  
+  // ผู้บันทึก
+  createdById     String
+  createdBy       User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Constraints
+  @@unique([planEntryId, fiscalYear, month])
+  @@unique([budgetItemId, fiscalYear, month])
+  @@index([fiscalYear])
+  @@index([month])
+  @@index([status])
+  @@index([createdAt])
+  @@map("monthly_progress")
+}
+
+// ==================== NEW: QUARTERLY SUMMARY ====================
+
+model QuarterlySummary {
+  id              String    @id @default(cuid())
+  
+  // ความสัมพันธ์
+  budgetYearId    String
+  budgetYear      BudgetYear @relation(fields: [budgetYearId], references: [id], onDelete: Cascade)
+  
+  departmentId    String?
+  department      Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  
+  workgroupId     String?
+  workgroup       Workgroup? @relation(fields: [workgroupId], references: [id], onDelete: SetNull)
+  
+  // ข้อมูลไตรมาส
+  fiscalYear      Int
+  quarter         Int       // 1, 2, 3, 4
+  
+  // เป้าหมายและผลดำเนินงาน
+  procurementTarget Int     @default(0)    // เป้าหมายจัดซื้อจัดจ้าง
+  procurementActual Int     @default(0)    // ผลดำเนินงานจริง
+  budgetTarget     Decimal  @default(0)    // เป้าหมายงบประมาณ
+  budgetActual     Decimal  @default(0)    // ใช้งบประมาณจริง
+  
+  // ตัวชี้วัด
+  achievementRate Float     @default(0)    // อัตราบรรลุเป้าหมาย
+  budgetUtilization Float   @default(0)    // อัตราการใช้งบประมาณ
+  
+  // สถานะ
+  status          String    @default("PLANNING") // PLANNING, IN_PROGRESS, COMPLETED
+  notes           String?
+  
+  // ผู้บันทึก
+  createdById     String
+  createdBy       User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Constraints
+  @@unique([fiscalYear, quarter, departmentId, workgroupId])
+  @@index([fiscalYear])
+  @@index([quarter])
+  @@index([departmentId])
+  @@index([workgroupId])
+  @@map("quarterly_summaries")
+}
+
+// ==================== ADDITIONAL MODELS ====================
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  action          String
+  tableName       String
+  recordId        String?
+  oldValues       Json?
+  newValues       Json?
+  ipAddress       String?
+  userAgent       String?
+  
+  // Relations
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([userId])
+  @@index([action])
+  @@index([tableName])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model SystemConfig {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  value           String
+  description     String?
+  isPublic        Boolean  @default(false)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  updatedBy       String?
+  
+  @@map("system_configs")
+}
+
+model BudgetAllocation {
+  id              String   @id @default(cuid())
+  
+  // ความสัมพันธ์
+  budgetItemId    String
+  budgetItem      BudgetItem @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+  
+  departmentId    String?
+  department      Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  
+  workgroupId     String?
+  workgroup       Workgroup? @relation(fields: [workgroupId], references: [id], onDelete: SetNull)
+  
+  // จำนวนเงินที่จัดสรร
+  allocatedAmount Decimal  @default(0)
+  usedAmount      Decimal  @default(0)
+  remainingAmount Decimal  @default(0)
+  
+  // เป้าหมายรายไตรมาส
+  q1Target        Decimal  @default(0)
+  q2Target        Decimal  @default(0)
+  q3Target        Decimal  @default(0)
+  q4Target        Decimal  @default(0)
+  
+  // ข้อมูลเพิ่มเติม
+  allocationDate  DateTime @default(now())
+  fiscalYear      Int
+  
+  // ผู้บันทึก
+  createdById     String
+  createdBy       User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Constraints
+  @@unique([budgetItemId, departmentId, workgroupId, fiscalYear])
+  @@index([budgetItemId])
+  @@index([departmentId])
+  @@index([workgroupId])
+  @@index([fiscalYear])
+  @@index([allocationDate])
+  @@map("budget_allocations")
+}
