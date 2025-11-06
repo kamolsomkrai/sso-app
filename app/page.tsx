@@ -1,21 +1,61 @@
-import Image from "next/image";
+// app/page.tsx
 
-export default function Home() {
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useAuth, mockUsers } from '@/components/auth-provider';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
+import { useState } from 'react';
+
+export default function LoginPage() {
+  const { login } = useAuth();
+  // ใช้ useRouter จริงจาก next/navigation
+  const router = useRouter();
+
+  const [selectedUserKey, setSelectedUserKey] = useState<string>('exec');
+
+  const handleLogin = () => {
+    const userToLogin = mockUsers[selectedUserKey];
+    if (userToLogin) {
+      login(userToLogin);
+      router.push('/dashboard');
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex w-full flex-1 flex-col items-center justify-center px-20 text-center">
-        <h1 className="text-6xl font-bold text-zinc-800 dark:text-zinc-100">
-          Welcome to{' '}
-          <a
-            className="text-blue-600 hover:underline dark:text-blue-400"
-            href="https://nextjs.org"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Next.js!
-          </a>
+    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="p-8 bg-white rounded-lg shadow-md w-full max-w-sm">
+        <h1 className="text-2xl font-bold text-center mb-6">
+          SSO Dashboard (Mock Login)
         </h1>
-      </main>
+        <p className="text-center text-gray-600 mb-4">
+          เลือกระดับสิทธิ์ (Role) เพื่อเข้าสู่ระบบ
+        </p>
+
+        <Select value={selectedUserKey} onValueChange={setSelectedUserKey}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="เลือก Role..." />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(mockUsers).map(([key, user]) => (
+              <SelectItem key={key} value={key}>
+                {user.name} ({user.role})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Button onClick={handleLogin} className="w-full mt-6">
+          เข้าสู่ระบบ
+        </Button>
+      </div>
     </div>
   );
 }
