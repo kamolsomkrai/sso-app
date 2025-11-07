@@ -296,29 +296,41 @@ export function CategoryView({ user, deptId, catId }: { user: User; deptId: stri
 }
 
 // L4: Item Table View
+// L4: Item Table View
 export function ItemTableView({ user, deptId, catId }: { user: User; deptId: string; catId: string }) {
   // TODO: Fetch item data (L4)
-  const { data: items, isLoading } = useQuery<ItemResponse[]>({
+  const { data: items, isLoading } = useQuery<any[]>({ //
     queryKey: ['items', deptId, catId],
     queryFn: async () => {
       // API นี้ยังไม่ได้สร้าง (GET /api/items?deptId=...&catId=...)
       // return (await axios.get(`/api/items?deptId=${deptId}&catId=${catId}`)).data;
 
-      // Mock data L4
+      // Mock data L4 - (อัปเดตให้มีข้อมูล 5 ปี)
+      // นี่คือ "ราย list" ที่ผู้บริหารต้องการเห็น
       return [
         {
           id: 'item1',
-          name: 'AWS WAF',
-          details: 'AWS WAF for 10 websites',
-          actualCost: 75000, // <--- เปลี่ยนจาก new Decimal(75000)
-          date: '2023-10-15T10:00:00Z',
+          name: 'AWS WAF License (1 ปี)',
+          details: 'สำหรับ 10 เว็บไซต์ (แผนก IT)',
+          date: '2024-10-15T10:00:00Z',
+          // ข้อมูลเปรียบเทียบ 5 ปี (ดึงจาก CSVs)
+          year2569_plan: 75000,
+          year2568_actual: 72000,
+          year2567_actual: 70000,
+          year2566_actual: 65000,
+          year2565_actual: 60000,
         },
         {
           id: 'item2',
-          name: 'Adobe Creative Cloud',
-          details: 'License for Design team',
-          actualCost: 25000, // <--- เปลี่ยนจาก new Decimal(25000)
-          date: '2023-10-20T10:00:00Z',
+          name: 'Adobe Creative Cloud (1 ปี)',
+          details: 'สำหรับทีม Design (แผนก IT)',
+          date: '2024-10-20T10:00:00Z',
+          // ข้อมูลเปรียบเทียบ 5 ปี
+          year2569_plan: 25000,
+          year2568_actual: 25000,
+          year2567_actual: 22000,
+          year2566_actual: 22000,
+          year2565_actual: 0, // (เพิ่งเริ่มซื้อ)
         },
       ];
     },
@@ -330,10 +342,14 @@ export function ItemTableView({ user, deptId, catId }: { user: User; deptId: str
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>รายการ</TableHead>
+          <TableHead>รายการ (L4)</TableHead>
           <TableHead>รายละเอียด</TableHead>
-          <TableHead>วันที่</TableHead>
-          <TableHead className="text-right">ค่าใช้จ่าย (THB)</TableHead>
+          <TableHead>วันที่ตั้งแผน</TableHead>
+          <TableHead className="text-right">แผนปี 69</TableHead>
+          <TableHead className="text-right">จริงปี 68</TableHead>
+          <TableHead className="text-right">จริงปี 67</TableHead>
+          <TableHead className="text-right">จริงปี 66</TableHead>
+          <TableHead className="text-right">จริงปี 65</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -344,9 +360,13 @@ export function ItemTableView({ user, deptId, catId }: { user: User; deptId: str
             <TableCell>
               {new Date(item.date).toLocaleDateString('th-TH')}
             </TableCell>
-            <TableCell className="text-right">
-              {formatCurrency(item.actualCost)}
+            <TableCell className="text-right font-bold text-primary">
+              {formatCurrency(item.year2569_plan)}
             </TableCell>
+            <TableCell className="text-right">{formatCurrency(item.year2568_actual)}</TableCell>
+            <TableCell className="text-right">{formatCurrency(item.year2567_actual)}</TableCell>
+            <TableCell className="text-right">{formatCurrency(item.year2566_actual)}</TableCell>
+            <TableCell className="text-right">{formatCurrency(item.year2565_actual)}</TableCell>
           </TableRow>
         ))}
       </TableBody>

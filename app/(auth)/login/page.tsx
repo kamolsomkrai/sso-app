@@ -24,7 +24,7 @@ export default function LoginPage() {
   const handleLogin = () => {
     const userToLogin = mockUsers[selectedUserKey];
     if (userToLogin) {
-      login(userToLogin);
+      login(userToLogin.id);
       router.push('/dashboard');
     }
   };
