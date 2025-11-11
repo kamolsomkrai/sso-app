@@ -13,19 +13,21 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns"; //
+import { th } from "date-fns/locale"; //
 import { formatCurrency } from "@/lib/utils";
 
 interface ChartProps {
   data: { name: string; actual: number; target: number }[];
-  selectedMonth: string | null;
-  onMonthSelect: (month: string | null) => void;
+  selectedMonth: string | null; // "10", "11"
+  onMonthSelect: (month: string | null) => void; //
 }
 
 export const MonthlyTrendTargetChart = ({ data, selectedMonth, onMonthSelect }: ChartProps) => {
   const handleClick = (payload: any) => {
     if (payload && payload.name) {
-      onMonthSelect(payload.name === selectedMonth ? null : payload.name);
+      const month = payload.name.split('-')[1]; //
+      onMonthSelect(month === selectedMonth ? null : month);
     }
   };
 
@@ -36,7 +38,11 @@ export const MonthlyTrendTargetChart = ({ data, selectedMonth, onMonthSelect }: 
           dataKey="name"
           stroke="hsl(var(--color-muted-foreground))"
           style={{ fontSize: "12px" }}
-          tickFormatter={(value) => format(new Date(value), "MMM")}
+          tickFormatter={(value) => {
+            // value is "2024-10"
+            const date = parseISO(`${value}-01`);
+            return format(date, "MMM", { locale: th });
+          }}
         />
         <YAxis
           stroke="hsl(var(--color-muted-foreground))"
@@ -55,19 +61,22 @@ export const MonthlyTrendTargetChart = ({ data, selectedMonth, onMonthSelect }: 
 
         {/* 1. กราฟแท่งสำหรับ Actual (รายจ่ายจริง) */}
         <Bar dataKey="actual" name="Actual" onClick={handleClick} className="cursor-pointer">
-          {data.map((entry, index) => (
-            <Cell
-              key={`cell-${index}`}
-              fill={
-                !selectedMonth || entry.name === selectedMonth
-                  ? "hsl(var(--color-primary))"
-                  : "hsl(var(--color-muted))"
-              }
-              fillOpacity={
-                !selectedMonth || entry.name === selectedMonth ? 1 : 0.4
-              }
-            />
-          ))}
+          {data.map((entry, index) => {
+            const entryMonth = entry.name.split('-')[1];
+            return (
+              <Cell
+                key={`cell-${index}`}
+                fill={
+                  !selectedMonth || entryMonth === selectedMonth
+                    ? "hsl(var(--color-primary))"
+                    : "hsl(var(--color-muted))"
+                }
+                fillOpacity={
+                  !selectedMonth || entryMonth === selectedMonth ? 1 : 0.4
+                }
+              />
+            )
+          })}
         </Bar>
 
         {/* 2. กราฟเส้นสำหรับ Target (เป้าหมาย) */}

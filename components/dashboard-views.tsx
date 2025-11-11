@@ -2,27 +2,13 @@
 
 'use client';
 
-import React, { useState } from 'react';
-import { useAuth } from './auth-provider';
-import { useSearchParams, useRouter } from 'next/navigation';
+import React from 'react';
+import { useAuth, User } from './auth-provider';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from './ui/select';
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from './ui/toggle-group';
-import { Card } from './ui/card';
-import { QuarterlyKpiCard, RootCauseAnalysisCard } from './kpi-card';
-import { TargetActualChart, BreakdownPieChart } from './charts';
-import { Button } from './ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { formatCurrency } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import {
   Table,
   TableBody,
@@ -31,171 +17,20 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
-import { formatCurrency } from '@/lib/utils';
-// import { Decimal } from '@prisma/client/runtime/library'; // <--- ลบออก: นี่คือสาเหตุของ Error
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Card } from './ui/card';
+import { Button } from './ui/button';
+import { ArrowLeft, TrendingDown, TrendingUp, Minus } from 'lucide-react';
 
-// Mock Data Types (ควรย้ายไปไฟล์ types.ts)
-interface User {
-  id: string;
-  name: string;
-  role: string;
-  departmentId?: string;
-}
-interface QuarterlyPerf {
-  quarter: number;
-  target: number;
-  actual: number;
-  variance: number;
-}
-interface MonthlyData {
-  name: string; // 'ต.ค.', 'พ.ย.', ...
-  target: number;
-  actual: number;
-}
-interface OverviewResponse {
-  quarterly: QuarterlyPerf[];
-  monthly: MonthlyData[];
-}
-interface VarianceResponse {
-  notes: any[]; // VarianceNote
-  breakdown: { name: string; value: number; id: string }[]; // by Dept
-}
-interface ItemResponse {
-  id: string;
-  name: string;
-  details: string | null;
-  actualCost: number; // <--- เปลี่ยนจาก Decimal เป็น number
-  date: string;
-}
+// -------------------------------------------------------------------
+// 1. Breadcrumbs Helper
+// -------------------------------------------------------------------
 
-// L1: Executive View
-export function ExecutiveView({ user }: { user: User }) {
-  const router = useRouter();
-  const [fiscalYear, setFiscalYear] = useState('2024'); // ปีงบ 2567
-  const [view, setView] = useState('performance'); // 'performance' vs 'trend'
-  const [selectedQ, setSelectedQ] = useState<number | null>(null);
-
-  // Query: L1 Overview (Target vs Actual)
-  const { data: overviewData, isLoading: isLoadingOverview } =
-    useQuery<OverviewResponse>({
-      queryKey: ['performance', 'overview', fiscalYear],
-      queryFn: async () => {
-        const { data } = await axios.get(
-          `/api/performance/overview?fy=${fiscalYear}`,
-        );
-        return data;
-      },
-    });
-
-  // Query: L1 Variance Analysis (Root Cause)
-  const { data: varianceData, isLoading: isLoadingVariance } =
-    useQuery<VarianceResponse>({
-      queryKey: ['performance', 'variance', fiscalYear, selectedQ],
-      queryFn: async () => {
-        const { data } = await axios.get(
-          `/api/performance/variance?fy=${fiscalYear}&quarter=${selectedQ}`,
-        );
-        return data;
-      },
-      enabled: !!selectedQ, // รัน query ต่อเมื่อมีการเลือก Q
-    });
-
-  const handleDrilldown = (deptId: string) => {
-    router.push(`/dashboard?deptId=${deptId}`);
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Filters */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <h2 className="text-2xl font-bold">Executive Dashboard (L1)</h2>
-        <div className="flex items-center gap-4">
-          <Select value={fiscalYear} onValueChange={setFiscalYear}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="เลือกปีงบประมาณ" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="2024">ปีงบ 2567</SelectItem>
-              <SelectItem value="2023">ปีงบ 2566</SelectItem>
-            </SelectContent>
-          </Select>
-          <ToggleGroup
-            type="single"
-            value={view}
-            onValueChange={(v) => v && setView(v)}
-          >
-            <ToggleGroupItem value="performance">เทียบเป้าหมาย</ToggleGroupItem>
-            <ToggleGroupItem value="trend">แนวโน้ม 5 ปี</ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-      </div>
-
-      {/* View Content */}
-      {view === 'performance' ? (
-        <div className="space-y-6">
-          {/* KPI Cards (4 Quarters) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {isLoadingOverview && <p>Loading KPIs...</p>}
-            {overviewData?.quarterly.map((q) => (
-              <QuarterlyKpiCard
-                key={q.quarter}
-                quarter={q.quarter}
-                target={q.target}
-                actual={q.actual}
-                variance={q.variance}
-                isSelected={selectedQ === q.quarter}
-                onClick={() =>
-                  setSelectedQ(q.quarter === selectedQ ? null : q.quarter)
-                }
-              />
-            ))}
-          </div>
-
-          {/* Main Chart (Monthly Target vs Actual) */}
-          <Card className="p-4">
-            <h3 className="text-lg font-semibold mb-4">
-              ประสิทธิภาพรายจ่ายเทียบเป้า (รายเดือน) - ปีงบ {parseInt(fiscalYear) + 543}
-            </h3>
-            {isLoadingOverview && <p>Loading Chart...</p>}
-            {overviewData?.monthly && (
-              <TargetActualChart data={overviewData.monthly} />
-            )}
-          </Card>
-
-          {/* Drill-Down Section (Root Cause) */}
-          {selectedQ && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <RootCauseAnalysisCard
-                data={varianceData?.notes ?? []}
-                isLoading={isLoadingVariance}
-              />
-              <Card className="p-4">
-                <h3 className="text-lg font-semibold mb-4">
-                  สัดส่วนผลต่าง Q{selectedQ} (จำแนกตามหน่วยงาน)
-                </h3>
-                {isLoadingVariance && <p>Loading Breakdown...</p>}
-                {varianceData?.breakdown && (
-                  <BreakdownPieChart
-                    data={varianceData.breakdown}
-                    onDataClick={(entry) => handleDrilldown(entry.id)}
-                  />
-                )}
-              </Card>
-            </div>
-          )}
-        </div>
-      ) : (
-        <Card className="p-4 text-center">
-          <h3 className="text-lg font-semibold">มุมมอง "แนวโน้ม 5 ปี"</h3>
-          <p>(สร้างกราฟ 5-Year Trend ที่นี่)</p>
-          {/* <FiveYearTrendChart /> */}
-        </Card>
-      )}
-    </div>
-  );
-}
-
-// Breadcrumbs Helper
 function Breadcrumbs({ path }: { path: { name: string; href: string }[] }) {
   const router = useRouter();
   return (
@@ -223,50 +58,99 @@ function Breadcrumbs({ path }: { path: { name: string; href: string }[] }) {
   );
 }
 
-// L2: Department View
-export function DepartmentView({ user, deptId }: { user: User; deptId: string }) {
-  const router = useRouter();
-  // TODO: Fetch data for this department (deptId)
-  const path = [
-    { name: 'หน้าหลัก (L1)', href: '/dashboard' },
-    { name: `แผนก ${deptId}`, href: `/dashboard?deptId=${deptId}` },
-  ];
+// -------------------------------------------------------------------
+// 2. L1 View (Original - Kept for reference or other roles)
+// -------------------------------------------------------------------
 
-  const handleDrilldown = (catId: string) => {
-    router.push(`/dashboard?deptId=${deptId}&catId=${catId}`);
-  };
-
+export function ExecutiveView({ user }: { user: User }) {
   return (
     <div className="space-y-6">
-      {user.role === 'EXECUTIVE' && <Breadcrumbs path={path} />}
-      <h2 className="text-2xl font-bold">Department Dashboard (L2)</h2>
-      <p>แสดงข้อมูลของแผนก: {deptId}</p>
-
-      {/* TODO: Add L2 KPIs, Target/Actual Chart for this Dept */}
-
-      <Card className="p-4">
-        <h3 className="text-lg font-semibold mb-4">
-          สัดส่วนค่าใช้จ่ายตามกลุ่มงาน (L3)
-        </h3>
-        {/* Mock Drilldown */}
-        <div className="flex gap-4">
-          <Button onClick={() => handleDrilldown('software')}>
-            Drill to Software
-          </Button>
-          <Button onClick={() => handleDrilldown('hardware')}>
-            Drill to Hardware
-          </Button>
-        </div>
-        {/* <BreakdownPieChart data={...} onDataClick={...} /> */}
-      </Card>
+      <h2 className="text-2xl font-bold">Original Executive Dashboard (L1)</h2>
+      <p>(This view is now replaced by HybridExecutiveView for Executives)</p>
     </div>
   );
 }
 
-// L3: Category View
+// -------------------------------------------------------------------
+// 3. L2 View (Upgraded with L3/L4 Accordion Drill-Down)
+// -------------------------------------------------------------------
+
+export function DepartmentView({ user, deptId }: { user: User; deptId: string }) {
+  const router = useRouter();
+  const fiscalYear = 2569;
+
+  // 1. Query L3 (Categories) จาก API
+  const { data: categories, isLoading: isLoadingCategories } = useQuery<any[]>({
+    queryKey: ['l2Categories', fiscalYear, deptId],
+    queryFn: async () => {
+      const { data } = await axios.get('/api/dashboard/l2-categories', {
+        params: {
+          year: fiscalYear,
+          dept_id: deptId,
+        },
+      });
+      return data;
+    },
+  });
+
+  if (isLoadingCategories) {
+    return <div>Loading Categories...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <Button variant="outline" size="sm" onClick={() => router.push('/dashboard')}>
+        <ArrowLeft className="h-4 w-4 mr-2" />
+        กลับไปหน้า L1 Hub
+      </Button>
+
+      <h2 className="text-3xl font-bold">L2 Dashboard: แผนก {deptId}</h2>
+      <p className="text-gray-500">
+        แสดงหมวดหมู่ (L3) ทั้งหมดของแผนกนี้ คลิกที่รายการเพื่อดู "ราย list" (L4)
+      </p>
+
+      {/* 2. สร้าง Accordion L3 -> L4 */}
+      <Accordion type="single" collapsible className="w-full">
+        {categories?.map((category: any) => (
+          <AccordionItem value={category.id} key={category.id} className="border-b">
+
+            <AccordionTrigger className="text-lg font-medium hover:no-underline">
+              <div className="flex justify-between items-center w-full pr-4">
+                <span>{category.name} (L3)</span>
+                <BudgetInsight
+                  plan={category.totalPlan}
+                  actual={category.totalActual}
+                />
+              </div>
+            </AccordionTrigger>
+
+            <AccordionContent>
+              <Card className="p-4 bg-gray-50/50">
+                <h4 className="text-md font-semibold mb-4">
+                  "ราย LIST" (L4)
+                </h4>
+                {/* 3. เรียก ItemTableView (L4) */}
+                <ItemTableView
+                  user={user}
+                  deptId={deptId}
+                  catId={category.id} //
+                  fiscalYear={fiscalYear}
+                />
+              </Card>
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------
+// 4. L3 View (Original - Kept for roles landing directly here)
+// -------------------------------------------------------------------
+
 export function CategoryView({ user, deptId, catId }: { user: User; deptId: string; catId: string }) {
   const router = useRouter();
-  // TODO: Fetch data for this category (deptId, catId)
   const path = [
     { name: 'หน้าหลัก (L1)', href: '/dashboard' },
     { name: `แผนก ${deptId}`, href: `/dashboard?deptId=${deptId}` },
@@ -283,93 +167,123 @@ export function CategoryView({ user, deptId, catId }: { user: User; deptId: stri
         แสดงข้อมูลของแผนก: {deptId}, กลุ่มงาน: {catId}
       </p>
 
-      {/* TODO: Add L3 KPIs, Target/Actual Chart for this Category */}
-
       <Card className="p-4">
         <h3 className="text-lg font-semibold mb-4">
           รายการค่าใช้จ่าย (L4)
         </h3>
-        <ItemTableView user={user} deptId={deptId} catId={catId} />
+        <ItemTableView user={user} deptId={deptId} catId={catId} fiscalYear={2569} />
       </Card>
     </div>
   );
 }
 
-// L4: Item Table View
-// L4: Item Table View
-export function ItemTableView({ user, deptId, catId }: { user: User; deptId: string; catId: string }) {
-  // TODO: Fetch item data (L4)
-  const { data: items, isLoading } = useQuery<any[]>({ //
-    queryKey: ['items', deptId, catId],
-    queryFn: async () => {
-      // API นี้ยังไม่ได้สร้าง (GET /api/items?deptId=...&catId=...)
-      // return (await axios.get(`/api/items?deptId=${deptId}&catId=${catId}`)).data;
+// -------------------------------------------------------------------
+// 5. L4 View (Upgraded with 5-Year Comparison)
+// -------------------------------------------------------------------
 
-      // Mock data L4 - (อัปเดตให้มีข้อมูล 5 ปี)
-      // นี่คือ "ราย list" ที่ผู้บริหารต้องการเห็น
-      return [
-        {
-          id: 'item1',
-          name: 'AWS WAF License (1 ปี)',
-          details: 'สำหรับ 10 เว็บไซต์ (แผนก IT)',
-          date: '2024-10-15T10:00:00Z',
-          // ข้อมูลเปรียบเทียบ 5 ปี (ดึงจาก CSVs)
-          year2569_plan: 75000,
-          year2568_actual: 72000,
-          year2567_actual: 70000,
-          year2566_actual: 65000,
-          year2565_actual: 60000,
+export function ItemTableView({ user, deptId, catId, fiscalYear }: { user: User; deptId: string; catId: string; fiscalYear: number }) {
+
+  // 1. Query L4 (Items) จาก API
+  const { data: items, isLoading } = useQuery<any[]>({
+    queryKey: ['l4Items', fiscalYear, catId],
+    queryFn: async () => {
+      const { data } = await axios.get('/api/dashboard/l4-items', {
+        params: {
+          year: fiscalYear,
+          cat_id: catId,
         },
-        {
-          id: 'item2',
-          name: 'Adobe Creative Cloud (1 ปี)',
-          details: 'สำหรับทีม Design (แผนก IT)',
-          date: '2024-10-20T10:00:00Z',
-          // ข้อมูลเปรียบเทียบ 5 ปี
-          year2569_plan: 25000,
-          year2568_actual: 25000,
-          year2567_actual: 22000,
-          year2566_actual: 22000,
-          year2565_actual: 0, // (เพิ่งเริ่มซื้อ)
-        },
-      ];
+      });
+      return data;
     },
   });
 
   if (isLoading) return <p>Loading items...</p>;
+  if (!items || items.length === 0) return <p className="text-gray-500">ไม่พบรายการ (L4) ในหมวดหมู่นี้</p>;
+
+  // 2. Dynamic Headers
+  const yearHeaders = [
+    { key: `plan_${fiscalYear}`, label: `แผนปี ${fiscalYear}` },
+    { key: `actual_${fiscalYear}`, label: `จริงปี ${fiscalYear}` },
+    { key: `actual_${fiscalYear - 1}`, label: `จริงปี ${fiscalYear - 1}` },
+    { key: `actual_${fiscalYear - 2}`, label: `จริงปี ${fiscalYear - 2}` },
+    { key: `actual_${fiscalYear - 3}`, label: `จริงปี ${fiscalYear - 3}` },
+    { key: `actual_${fiscalYear - 4}`, label: `จริงปี ${fiscalYear - 4}` },
+  ];
 
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>รายการ (L4)</TableHead>
-          <TableHead>รายละเอียด</TableHead>
-          <TableHead>วันที่ตั้งแผน</TableHead>
-          <TableHead className="text-right">แผนปี 69</TableHead>
-          <TableHead className="text-right">จริงปี 68</TableHead>
-          <TableHead className="text-right">จริงปี 67</TableHead>
-          <TableHead className="text-right">จริงปี 66</TableHead>
-          <TableHead className="text-right">จริงปี 65</TableHead>
+          <TableHead>แก้ไขล่าสุด (โดย)</TableHead>
+          {yearHeaders.map(h => (
+            <TableHead key={h.key} className="text-right">{h.label}</TableHead>
+          ))}
         </TableRow>
       </TableHeader>
       <TableBody>
-        {items?.map((item) => (
-          <TableRow key={item.id}>
+        {items?.map((item: any) => (
+          <TableRow key={item.id} className="bg-white">
             <TableCell className="font-medium">{item.name}</TableCell>
-            <TableCell>{item.details}</TableCell>
-            <TableCell>
-              {new Date(item.date).toLocaleDateString('th-TH')}
+            <TableCell className="text-xs text-gray-500">
+              {new Date(item.updatedAt).toLocaleDateString('th-TH')}
+              <br />
+              ({item.updatedBy})
             </TableCell>
-            <TableCell className="text-right font-bold text-primary">
-              {formatCurrency(item.year2569_plan)}
-            </TableCell>
-            <TableCell className="text-right">{formatCurrency(item.year2568_actual)}</TableCell>
-            <TableCell className="text-right">{formatCurrency(item.year2567_actual)}</TableCell>
-            <TableCell className="text-right">{formatCurrency(item.year2566_actual)}</TableCell>
-            <TableCell className="text-right">{formatCurrency(item.year2565_actual)}</TableCell>
+            {/* 3. Dynamic Cells */}
+            {yearHeaders.map(h => (
+              <TableCell
+                key={h.key}
+                className={cn(
+                  "text-right",
+                  h.key.startsWith('plan') && "font-bold text-primary",
+                  h.key === `actual_${fiscalYear}` && "font-semibold text-blue-600"
+                )}
+              >
+                {formatCurrency(item[h.key] || 0)}
+              </TableCell>
+            ))}
           </TableRow>
         ))}
       </TableBody>
     </Table>
+  );
+}
+
+// -------------------------------------------------------------------
+// 6. Helper Component (แสดงสัญลักษณ์ 📈/📉)
+// -------------------------------------------------------------------
+
+interface BudgetInsightProps {
+  plan: number;
+  actual: number;
+}
+function BudgetInsight({ plan, actual }: BudgetInsightProps) {
+  const variance = actual - plan;
+  const rate = plan === 0 ? 0 : (actual / plan) * 100;
+  let Icon = Minus;
+  let color = "text-gray-500";
+  let text = "ตามเป้า";
+
+  if (variance > 0) {
+    Icon = TrendingUp;
+    color = "text-red-600";
+    text = `+${rate}% เกินเป้า ${formatCurrency(variance)}`;
+  } else if (variance < 0) {
+    Icon = TrendingDown;
+    color = "text-green-600";
+    text = `-${rate}% ต่ำกว่าเป้า ${formatCurrency(Math.abs(variance))}`;
+  }
+
+  return (
+    <div className={cn("flex items-center space-x-2", color)}>
+      <Icon className="h-5 w-5" />
+      <div className="text-right">
+        <div className="text-sm font-semibold">{text}</div>
+        <div className="text-xs font-normal text-gray-500">
+          ใช้จริง {formatCurrency(actual)} / เป้าหมาย {formatCurrency(plan)}
+        </div>
+      </div>
+    </div>
   );
 }

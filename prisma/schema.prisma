@@ -1,16 +1,18 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// prisma/schema.prisma
+
+datasource db {
+  provider = "postgresql" // (หรือ mysql, sqlserver)
+  url      = env("DATABASE_URL")
+}
 
 generator client {
   provider = "prisma-client-js"
 }
 
-datasource db {
-  provider = "postgresql" // หรือ "mysql", "sqlite", "sqlserver"
-  url      = env("DATABASE_URL")
-}
+// -----------------------------------------------------------------
+// 1. ผู้ใช้งานและปีงบประมาณ
+// -----------------------------------------------------------------
 
-// Enum สำหรับ Roles
 enum UserRole {
   EXECUTIVE
   DEPT_HEAD
@@ -18,101 +20,161 @@ enum UserRole {
   OPERATOR
 }
 
-// Enum สำหรับประเภทงบประมาณ
-enum BudgetType {
-  EXPENSE
-  INCOME
-}
-
+// 1.1 (อัปเดตตามที่คุณขอ)
+// ตาราง User จะเก็บข้อมูลจาก Provider โดยตรง
 model User {
-  id            String       @id @default(uuid())
-  email         String       @unique
-  name          String
-  role          UserRole
-  departmentId  String?
-  department    Department?  @relation(fields: [departmentId], references: [id])
-  providerId    String       @default("mockProviderId") // ตามที่คุณต้องการ
-  varianceNotes VarianceNote[] // User ที่เขียน Note
+  // providerId ที่ได้จาก NextAuth / SSO
+  providerId String @id @unique @db.VarChar(100)
+  
+  firstName String @db.VarChar(255)
+  lastName  String @db.VarChar(255)
+  position  String? @db.VarChar(255) // ตำแหน่ง
+  role      UserRole @default(OPERATOR)
 
-  @@index([departmentId])
+  // Audit Trail (ยังคงเชื่อมโยงเหมือนเดิม)
+  createdItems        ProcurementItem[]   @relation("CreatedBy")
+  updatedItems        ProcurementItem[]   @relation("UpdatedBy")
+  createdEntries      MonthlyActualEntry[] @relation("CreatedBy")
+  updatedEntries      MonthlyActualEntry[] @relation("UpdatedBy")
 }
 
-model Department {
-  id            String         @id @default(uuid())
-  name          String // "IT", "HR", "Finance"
-  users         User[]
-  expenses      ExpenseItem[]
-  incomes       IncomeItem[]
-  budgets       Budget[] // เป้าหมายของแผนก
-  varianceNotes VarianceNote[] // Note ของแผนก
+// (นำมาจาก SQL ของคุณ)
+model FiscalYear {
+  year_id     Int     @id @default(autoincrement())
+  fiscal_year Int     @unique // 2569, 2570
+  year_label  String  @db.VarChar(10)
+  is_active   Boolean @default(false)
+  is_planning Boolean @default(false)
+
+  // Relations
+  planData    PlanFinancialData[]
 }
 
-model ExpenseCategory {
-  id      String        @id @default(uuid())
-  name    String // "Software", "Hardware", "Services"
-  items   ExpenseItem[]
-  budgets Budget[] // เป้าหมายของกลุ่มงาน
+// -----------------------------------------------------------------
+// 2. โครงสร้างงบประมาณ (L1-L4)
+// (นำมาจาก SQL ของคุณ)
+// -----------------------------------------------------------------
+
+enum CategoryType {
+  revenue
+  expense
 }
 
-// ข้อมูลรายจ่าย (L4 - ผลลัพธ์)
-model ExpenseItem {
-  id           String          @id @default(uuid())
-  name         String // "WAF (Web Application Firewall)"
-  details      String? // "AWS WAF / Cloudflare..."
-  actualCost   Decimal
-  date         DateTime // วันที่เกิดรายการ
-  department   Department      @relation(fields: [departmentId], references: [id])
-  departmentId String
-  category     ExpenseCategory @relation(fields: [categoryId], references: [id])
-  categoryId   String
+model BudgetCategory {
+  category_id     String  @id @default(uuid())
+  category_code   String  @unique @db.VarChar(50)
+  category_name   String  @db.VarChar(500)
+  category_type   CategoryType
+  level           Int
+  display_order   Int
 
-  @@index([departmentId])
-  @@index([categoryId])
-  @@index([date])
+  // Self-relation (Tree Structure)
+  parent_id       String?
+  parent          BudgetCategory?  @relation("CategoryTree", fields: [parent_id], references: [category_id])
+  children        BudgetCategory[] @relation("CategoryTree")
+
+  // Relations
+  planData        PlanFinancialData[]
+  
+  // (เชื่อมกับ L4 Items)
+  procurementItems ProcurementItem[] @relation("CategoryItems") 
+
+  // (เชื่อมกับ L2 Requesting Dept)
+  requestedItems   ProcurementItem[] @relation("RequestingDept")
+
+  monthlyEntries  MonthlyActualEntry[] 
 }
 
-// ข้อมูลรายรับ (L1 - ผลลัพธ์)
-model IncomeItem {
-  id           String     @id @default(uuid())
-  name         String
-  amount       Decimal
-  date         DateTime // วันที่เกิดรายการ
-  department   Department @relation(fields: [departmentId], references: [id])
-  departmentId String
+// -----------------------------------------------------------------
+// 3. ข้อมูล "แผน" (Target)
+// (นำมาจาก SQL ของคุณ)
+// -----------------------------------------------------------------
 
-  @@index([departmentId])
-  @@index([date])
+model PlanFinancialData {
+  plan_id     Int      @id @default(autoincrement())
+  plan_amount Decimal  @db.Decimal(15, 2)
+  plan_q1     Decimal? @db.Decimal(15, 2)
+  plan_q2     Decimal? @db.Decimal(15, 2)
+  plan_q3     Decimal? @db.Decimal(15, 2)
+  plan_q4     Decimal? @db.Decimal(15, 2)
+
+  // Relations
+  category_id String
+  category    BudgetCategory @relation(fields: [category_id], references: [category_id])
+
+  fiscal_year Int
+  fiscalYear  FiscalYear  @relation(fields: [fiscal_year], references: [fiscal_year])
+  
+  @@unique([category_id, fiscal_year])
 }
 
-// Model ใหม่: สำหรับเก็บเป้าหมาย (Target)
-model Budget {
-  id           String          @id @default(uuid())
-  year         Int // ปีงบประมาณ (เช่น 2024 หมายถึง FY2568)
-  month        Int // เดือน (1-12, โดย 10-12 คือ Q1)
-  amount       Decimal // ยอดเป้าหมาย
-  type         BudgetType // EXPENSE หรือ INCOME
-  department   Department?     @relation(fields: [departmentId], references: [id])
-  departmentId String? // Null = เป้าหมายรวมขององค์กร (L1)
-  category     ExpenseCategory? @relation(fields: [categoryId], references: [id])
-  categoryId   String? // Null = เป้าหมายรวมของแผนก (L2)
+// -----------------------------------------------------------------
+// 4. "ราย LIST" (L4) และ ข้อมูลกรอกรายเดือน
+// -----------------------------------------------------------------
 
-  @@index([year, month, type])
-  @@index([departmentId])
-  @@index([categoryId])
+// L4: "ราย list" (เช่น 'AWS WAF License')
+model ProcurementItem {
+  item_id   Int     @id @default(autoincrement())
+  item_name String  @db.VarChar(500)
+  details   String?
+
+  // L2 Department (Requesting)
+  requesting_dept_id String
+  requestingDept     BudgetCategory @relation("RequestingDept", fields: [requesting_dept_id], references: [category_id])
+
+  // L4 Budget Category
+  category_id String
+  category    BudgetCategory @relation("CategoryItems", fields: [category_id], references: [category_id])
+  // --- 1.2 (อัปเดตตามที่คุณขอ) ---
+  // เราจะเก็บแค่ "แผน" ของปีปัจจุบันเท่านั้น
+  // ข้อมูลย้อนหลัง 5 ปี จะดึงจาก MonthlyActualEntry
+  plan_amount       Decimal  @db.Decimal(12, 2) // แผนปีปัจจุบัน (จาก SQL total_price)
+  procurement_code  String?  @db.VarChar(50) // (จาก SQL)
+  unit              String?  @db.VarChar(50)  // (จาก SQL)
+  quantity          Int?     // (จาก SQL)
+  unit_price        Decimal? @db.Decimal(12, 2) // (จาก SQL)
+
+  // --- Audit Trail ---
+  createdAt   DateTime @default(now())
+  createdById String
+  createdBy   User     @relation("CreatedBy", fields: [createdById], references: [providerId]) //
+
+  updatedAt   DateTime @updatedAt
+  updatedById String
+  updatedBy   User     @relation("UpdatedBy", fields: [updatedById], references: [providerId]) //
+
+  // Relation
+  monthlyEntries MonthlyActualEntry[] // ยอดใช้จริงรายเดือนของ Item นี้
 }
 
-// Model ใหม่: สำหรับการวิเคราะห์สาเหตุ "ติดตรงไหน"
-model VarianceNote {
-  id           String     @id @default(uuid())
-  year         Int // ปีงบประมาณ
-  quarter      Int // ไตรมาสที่ (1, 2, 3, 4)
-  note         String // "สาเหตุ: เกิดการจัดซื้อ Server ด่วนนอกแผนงาน..."
-  department   Department @relation(fields: [departmentId], references: [id])
-  departmentId String // Note นี้ผูกกับแผนกไหน
-  author       User       @relation(fields: [authorUserId], references: [id])
-  authorUserId String // ใครเป็นคนบันทึก Note
-  createdAt    DateTime   @default(now())
+// "ข้อมูลที่ผู้ใช้กรอกเข้ามารายเดือน"
+// (นี่คือตารางที่ Dashboard จะใช้วาดกราฟ และ เปรียบเทียบ 5 ปี)
+model MonthlyActualEntry {
+  entry_id  Int     @id @default(autoincrement())
+  amount    Decimal @db.Decimal(12, 2) // ยอดใช้จ่ายจริงที่กรอกเข้ามา
 
-  @@index([year, quarter])
-  @@index([departmentId])
+  fiscalYear Int    // เช่น 2569
+  month      Int    // เช่น 10 (ต.ค.), 11 (พ.ย.)
+
+  // เชื่อมโยงกลับไปยัง L4 (Item)
+  procurement_item_id Int
+  procurementItem     ProcurementItem @relation(fields: [procurement_item_id], references: [item_id])
+
+  // (เพื่อความเร็วในการ Query L1-L3)
+  category_id String
+  category    BudgetCategory @relation(fields: [category_id], references: [category_id])
+
+  // --- Audit Trail (ใครกรอก/แก้) ---
+  createdAt   DateTime @default(now())
+  createdById String // "ใครเป็นคนกรอก"
+  createdBy   User     @relation("CreatedBy", fields: [createdById], references: [providerId]) //
+
+  updatedAt   DateTime @updatedAt // "แก้ไขเมื่อไหร่"
+  updatedById String // "ใครเป็นคนแก้ไข"
+  updatedBy   User     @relation("UpdatedBy", fields: [updatedById], references: [providerId]) //
+
+  notes       String? 
+  
+  @@index([fiscalYear, month])
+  @@index([category_id])
 }

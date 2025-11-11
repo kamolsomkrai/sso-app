@@ -14,9 +14,9 @@ interface MetricCardProps {
 
 export const MetricCard = ({ title, value, change, changeType = "neutral", icon: Icon }: MetricCardProps) => {
   const changeColorClass = {
-    positive: "text-green-600", // [cite: 217] (matching existing style)
-    negative: "text-red-600",   // [cite: 217] (matching existing style)
-    neutral: "text-gray-500",   // [cite: 57] (matching existing style)
+    positive: "text-green-600", // (matching existing style)
+    negative: "text-red-600",   // (matching existing style)
+    neutral: "text-gray-500",   // (matching existing style)
   }[changeType];
 
   return (
