@@ -1,5 +1,4 @@
-// app/api/dashboard/l1-hub/route.ts
-
+// app/api/dashboard/l1-hub/route.ts  (replace existing GET)
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
@@ -8,159 +7,154 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const fiscalYear = parseInt(searchParams.get("year") || "2569");
-    const selectedMonth = searchParams.get("month"); // e.g., "10"
-    const selectedDeptId = searchParams.get("dept_id"); // e.g., "uuid-of-dept" (String)
+    const selectedMonth = searchParams.get("month"); // optional
+    const selectedDeptId = searchParams.get("dept_id");
 
-    // --- 1. สร้าง WHERE clause แบบไดนามิก ---
-    const whereClause: Prisma.MonthlyActualEntryWhereInput = {
-      fiscalYear: fiscalYear,
+    // years for history (current + -1, -2)
+    const years = [fiscalYear, fiscalYear - 1, fiscalYear - 2];
+
+    // --- Actuals: group by fiscalYear & month for last 3 years ---
+    const actuals3y = await db.monthlyActualEntry.groupBy({
+      by: ["fiscalYear", "month"],
+      where: {
+        fiscalYear: { in: years },
+      },
+      _sum: { amount: true },
+      orderBy: [{ fiscalYear: "desc" }, { month: "asc" }],
+    });
+
+    // Build monthly series per year (Thai FY months: Oct..Sep). We will return arrays per year.
+    const buildYearMonthly = (year: number) => {
+      // months order: 10..12,1..9
+      const months = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+      return months.map((m) => {
+        const rec = actuals3y.find(
+          (a) => a.fiscalYear === year && a.month === m
+        );
+        return {
+          month: `${year}-${m.toString().padStart(2, "0")}`,
+          actual: parseFloat((rec?._sum.amount || 0).toString()),
+        };
+      });
     };
+    const monthlyHistory = years.map((y) => ({
+      year: y,
+      months: buildYearMonthly(y),
+    }));
 
-    if (selectedMonth) {
-      whereClause.month = parseInt(selectedMonth);
-    }
+    // --- Quarterly from monthly data: sum months into quarters (Q1..Q4) ---
+    const toQuarter = (month: number) => {
+      if ([10, 11, 12].includes(month)) return 1;
+      if ([1, 2, 3].includes(month)) return 2;
+      if ([4, 5, 6].includes(month)) return 3;
+      return 4;
+    };
+    const quarterlyHistory = years.map((y) => {
+      const quarters = [1, 2, 3, 4].map((q) => ({ quarter: q, actual: 0 }));
+      actuals3y
+        .filter((a) => a.fiscalYear === y)
+        .forEach((a) => {
+          const q = toQuarter(a.month);
+          const idx = q - 1;
+          quarters[idx].actual += parseFloat((a._sum.amount || 0).toString());
+        });
+      return { year: y, quarters };
+    });
 
-    // (ค้นหา L3/L4 categories ภายใต้ L2 Dept ที่เลือก)
-    let l2CategoryIds: string[] | null = null;
+    // --- Plan totals per year (sum planFinancialData by category_type revenue/expense) ---
+    // We'll compute total plan for expense and revenue per year
+    const planRows = await db.planFinancialData.findMany({
+      where: { fiscal_year: { in: years } },
+      include: { category: { select: { category_type: true } } },
+    });
+    const planByYear = new Map<number, { revenue: number; expense: number }>();
+    years.forEach((y) => planByYear.set(y, { revenue: 0, expense: 0 }));
+    planRows.forEach((r) => {
+      const y = r.fiscal_year;
+      const key =
+        r.category.category_type === "revenue" ? "revenue" : "expense";
+      const cur = planByYear.get(y)!;
+      cur[key] += Number(r.plan_amount);
+      planByYear.set(y, cur);
+    });
+
+    // --- L2 breakdown (expense) for current fiscalYear (existing logic) ---
+    // re-use existing mapping: get L2 list and map actuals -> L2
+    const l2Departments = await db.budgetCategory.findMany({
+      where: { level: 2 },
+    });
+    const l3AndL4Categories = await db.budgetCategory.findMany({
+      where: { OR: [{ level: 3 }, { level: 4 }] },
+      select: { category_id: true, parent_id: true },
+    });
+    const l3ToL2 = new Map<string, string>();
+    l3AndL4Categories.forEach((c) => {
+      if (
+        c.parent_id &&
+        l2Departments.some((l2) => l2.category_id === c.parent_id)
+      ) {
+        l3ToL2.set(c.category_id, c.parent_id);
+      }
+    });
+    const l4ToL2 = new Map<string, string>();
+    l3AndL4Categories.forEach((c) => {
+      if (c.parent_id && l3ToL2.has(c.parent_id)) {
+        l4ToL2.set(c.category_id, l3ToL2.get(c.parent_id)!);
+      }
+    });
+
+    // get actuals for current fiscalYear (optionally filtered by month or dept)
+    const whereClause: Prisma.MonthlyActualEntryWhereInput = { fiscalYear };
+    if (selectedMonth) whereClause.month = parseInt(selectedMonth);
     if (selectedDeptId) {
-      // (เราต้องหากลูก L3 และ L4 ทั้งหมด)
-      const l3Categories = await db.budgetCategory.findMany({
+      // gather L3/L4 under selectedDeptId
+      const l3Cats = await db.budgetCategory.findMany({
         where: { parent_id: selectedDeptId },
         select: {
           category_id: true,
           children: { select: { category_id: true } },
         },
       });
-
-      const allChildIds: string[] = [];
-      l3Categories.forEach((l3) => {
-        allChildIds.push(l3.category_id);
-        l3.children.forEach((l4) => allChildIds.push(l4.category_id));
+      const allIds: string[] = [];
+      l3Cats.forEach((l3) => {
+        allIds.push(l3.category_id);
+        l3.children.forEach((c) => allIds.push(c.category_id));
       });
-
-      l2CategoryIds = allChildIds;
-      whereClause.category_id = { in: l2CategoryIds };
+      whereClause.category_id = { in: allIds };
     }
-
-    // --- 2. Query ข้อมูล Actual (ที่กรองแล้ว) ---
     const actualEntries = await db.monthlyActualEntry.findMany({
       where: whereClause,
     });
-    const kpiTotalExpense = actualEntries.reduce(
-      (sum, entry) => sum + parseFloat(entry.amount.toString()),
+    const totalActualCurrent = actualEntries.reduce(
+      (s, e) => s + parseFloat(e.amount.toString()),
       0
     );
 
-    // --- 3. Query ข้อมูล Plan (Target) ---
-    const totalPlanData = await db.planFinancialData.findFirst({
-      where: { category: { category_code: "EXP" }, fiscal_year: fiscalYear },
+    // total plan/variance for current FY (expense)
+    const totalPlanRow = await db.planFinancialData.findFirst({
+      where: { fiscal_year: fiscalYear, category: { category_code: "EXP" } },
     });
-    const totalTarget = (
-      totalPlanData?.plan_amount || new Prisma.Decimal(89500000)
-    ).toNumber();
-    const kpiBudgetVariance = totalTarget - kpiTotalExpense;
-
-    // --- 4. Query ข้อมูลกราฟแท่ง (Monthly) ---
-    const monthlyActuals = await db.monthlyActualEntry.groupBy({
-      by: ["month"],
-      where: {
-        fiscalYear: fiscalYear,
-        ...(selectedDeptId ? { category_id: { in: l2CategoryIds } } : {}),
-      },
-      _sum: { amount: true },
-      orderBy: { month: "asc" },
-    });
-
-    const targetPerMonth = totalTarget / 12;
-
-    const monthlyChartData = Array.from({ length: 12 }, (_, i) => {
-      const month = ((i + 9) % 12) + 1; // 10, 11, 12, 1, 2, ...
-      const actual =
-        monthlyActuals.find((m) => m.month === month)?._sum.amount || 0;
-      const year = month >= 10 ? fiscalYear - 1 : fiscalYear;
-      const monthDateStr = `${year}-${month.toString().padStart(2, "0")}`; // "2024-10" ... "2025-09"
-
-      return {
-        name: monthDateStr,
-        actual: parseFloat(actual.toString()),
-        target: targetPerMonth,
-      };
-    });
-
-    // --- 5. Query ข้อมูล List/Chart แผนก (L2) ---
-    const l2Departments = await db.budgetCategory.findMany({
-      where: { level: 2, category_type: "expense" },
-    });
-
-    // (ดึง L3 และ L4 เพื่อ map กลับไป L2)
-    const l3AndL4Categories = await db.budgetCategory.findMany({
-      where: {
-        OR: [{ level: 3 }, { level: 4 }],
-        category_type: "expense",
-      },
-      select: { category_id: true, parent_id: true },
-    });
-
-    // Map L4 -> L3, และ L3 -> L2
-    const l3ToL2Map = new Map<string, string>(); // <l3_id, l2_id>
-    l3AndL4Categories.forEach((l3) => {
-      if (
-        l3.parent_id &&
-        l2Departments.some((l2) => l2.category_id === l3.parent_id)
-      ) {
-        l3ToL2Map.set(l3.category_id, l3.parent_id);
-      }
-    });
-    const l4ToL2Map = new Map<string, string>(); // <l4_id, l2_id>
-    l3AndL4Categories.forEach((l4) => {
-      if (l4.parent_id && l3ToL2Map.has(l4.parent_id)) {
-        l4ToL2Map.set(l4.category_id, l3ToL2Map.get(l4.parent_id)!);
-      }
-    });
-
-    // (หา Actuals ทั้งหมดที่กรองตามเดือน)
-    const deptActualEntries = await db.monthlyActualEntry.findMany({
-      where: {
-        fiscalYear: fiscalYear,
-        ...(selectedMonth ? whereClause : {}),
-      },
-      select: { amount: true, category_id: true },
-    });
-
-    const l2Map = new Map<string, number>();
-    l2Departments.forEach((d) => l2Map.set(d.category_id, 0));
-
-    deptActualEntries.forEach((entry) => {
-      const l2ParentId =
-        l4ToL2Map.get(entry.category_id) || l3ToL2Map.get(entry.category_id);
-      if (l2ParentId) {
-        const currentSum = l2Map.get(l2ParentId) || 0;
-        l2Map.set(l2ParentId, currentSum + parseFloat(entry.amount.toString()));
-      }
-    });
-
-    const deptChartData = Array.from(l2Map.entries())
-      .map(([id, value]) => {
-        const dept = l2Departments.find((d) => d.category_id === id);
-        return {
-          id: id,
-          name: dept?.category_name || "Unknown",
-          value: value,
-        };
-      })
-      .filter((d) => d.value > 0);
-
-    const topDept =
-      deptChartData.sort((a, b) => b.value - a.value)[0]?.name || "N/A";
+    const totalPlanCurrent = totalPlanRow
+      ? Number(totalPlanRow.plan_amount)
+      : 0;
+    const budgetVariance = totalPlanCurrent - totalActualCurrent;
 
     return NextResponse.json({
-      kpis: {
-        totalExpense: kpiTotalExpense,
-        budgetVariance: kpiBudgetVariance,
-        topSpendingDept: topDept,
+      success: true,
+      data: {
+        monthlyHistory, // [{year, months:[{month, actual}]}]  for last 3 years
+        quarterlyHistory, // [{year, quarters:[{quarter, actual}]}]
+        planByYear: Array.from(planByYear.entries()).map(([year, v]) => ({
+          year,
+          ...v,
+        })),
+        current: {
+          fiscalYear,
+          totalActualCurrent,
+          totalPlanCurrent,
+          budgetVariance,
+        },
       },
-      monthlyChartData,
-      deptChartData,
     });
   } catch (error) {
     console.error("[API_L1_HUB_ERROR]", error);

@@ -1,94 +1,82 @@
-// app/api/dashboard/l2-categories/route.ts
-
+// app/api/dashboard/l4-items/route.ts  (replace existing GET)
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { Prisma } from "@prisma/client";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const fiscalYear = parseInt(searchParams.get("year") || "2569");
-    const deptId = searchParams.get("dept_id"); // (นี่คือ String UUID)
+    const catId = searchParams.get("cat_id");
+    if (!catId)
+      return new NextResponse("Category ID is required", { status: 400 });
 
-    if (!deptId) {
-      return new NextResponse("Department ID is required", { status: 400 });
-    }
-
-    // 1. หา L3 Categories ทั้งหมดภายใต้ L2 Dept นี้
-    const l3Categories = await db.budgetCategory.findMany({
-      where: { parent_id: deptId }, //
-      orderBy: { display_order: "asc" },
-    });
-
-    const l3CategoryIds = l3Categories.map((c) => c.category_id);
-
-    // 2. หา L4 Categories ภายใต้ L3 เหล่านี้
+    // 1. L4 categories under this L3
     const l4Categories = await db.budgetCategory.findMany({
-      where: { parent_id: { in: l3CategoryIds } },
-      select: { category_id: true, parent_id: true },
+      where: { parent_id: catId },
+      select: { category_id: true },
     });
     const l4CategoryIds = l4Categories.map((c) => c.category_id);
 
-    // 3. หา "ยอดแผน" (Plan) ของ L3 categories (Sum L4 plans if needed)
-    const l3PlanData = await db.planFinancialData.findMany({
-      where: {
-        fiscal_year: fiscalYear,
-        category_id: { in: l3CategoryIds },
+    // 2. Items under L4
+    const items = await db.procurementItem.findMany({
+      where: { category_id: { in: l4CategoryIds } },
+      include: {
+        createdBy: { select: { firstName: true, lastName: true } },
+        updatedBy: { select: { firstName: true, lastName: true } },
       },
     });
 
-    // 4. หา "ยอดใช้จริง" (Actual) ของ L3 categories (Sum L4 entries)
-    const l3ActualData = await db.monthlyActualEntry.groupBy({
-      by: ["category_id"],
+    const itemIds = items.map((i) => i.item_id);
+
+    // 3. Historical actuals: last 12 months (Thai FY months: Oct..Sep of current fiscalYear)
+    // We will query fiscalYear and fiscalYear-1 because Oct-Dec belong to previous calendar year in FY system
+    const months = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const fiscalYearsToQuery = [fiscalYear, fiscalYear - 1];
+    const actualsMonthly = await db.monthlyActualEntry.groupBy({
+      by: ["procurement_item_id", "fiscalYear", "month"],
       where: {
-        fiscalYear: fiscalYear,
-        category_id: { in: [...l3CategoryIds, ...l4CategoryIds] }, //
+        procurement_item_id: { in: itemIds },
+        fiscalYear: { in: fiscalYearsToQuery },
+        month: { in: months },
       },
       _sum: { amount: true },
     });
 
-    // Map L4 actuals back to L3
-    const l3ActualMap = new Map<string, number>();
-    l3Categories.forEach((l3) => l3ActualMap.set(l3.category_id, 0));
-
-    l3ActualData.forEach((actual) => {
-      let l3ParentId: string | null = null;
-      if (l3CategoryIds.includes(actual.category_id)) {
-        l3ParentId = actual.category_id;
-      } else {
-        const l4Cat = l4Categories.find(
-          (l4) => l4.category_id === actual.category_id
+    // 4. Build per-item monthly series (last 12 months in order Oct..Sep)
+    const buildSeries = (itemId: number) => {
+      return months.map((m) => {
+        const fy = m >= 10 ? fiscalYear - 1 : fiscalYear; // month 10-12 -> previous fiscal year of the calendar
+        const rec = actualsMonthly.find(
+          (a) =>
+            a.procurement_item_id === itemId &&
+            a.fiscalYear === fy &&
+            a.month === m
         );
-        if (l4Cat) l3ParentId = l4Cat.parent_id;
-      }
+        return {
+          month: `${fy}-${m.toString().padStart(2, "0")}`,
+          actual: parseFloat((rec?._sum.amount || 0).toString()),
+        };
+      });
+    };
 
-      if (l3ParentId) {
-        const currentSum = l3ActualMap.get(l3ParentId) || 0;
-        l3ActualMap.set(
-          l3ParentId,
-          currentSum + parseFloat(actual._sum.amount?.toString() || "0")
-        );
-      }
-    });
-
-    // 5. ประกอบข้อมูล
-    const responseData = l3Categories.map((cat) => {
-      const plan =
-        l3PlanData.find((p) => p.category_id === cat.category_id)
-          ?.plan_amount || 0;
-      const actual = l3ActualMap.get(cat.category_id) || 0;
-
+    // 5. For each item return plan (current FY) and monthly series (last 12 months)
+    const response = items.map((item) => {
+      const series = buildSeries(item.item_id);
       return {
-        id: cat.category_id,
-        name: cat.category_name,
-        totalPlan: parseFloat(plan.toString()),
-        totalActual: actual,
+        id: item.item_id,
+        name: item.item_name,
+        updatedBy: `${item.updatedBy.firstName} ${item.updatedBy.lastName}`,
+        updatedAt: item.updatedAt,
+        plan_current_fy: parseFloat(item.plan_amount.toString()),
+        monthlyLast12: series, // [{month, actual}, ...] Oct..Sep
+        // also provide one-line summary: total actual last 12 months
+        actual_last_12_sum: series.reduce((s, v) => s + v.actual, 0),
       };
     });
 
-    return NextResponse.json(responseData);
+    return NextResponse.json(response);
   } catch (error) {
-    console.error("[API_L2_CATEGORIES_ERROR]", error);
+    console.error("[API_L4_ITEMS_ERROR]", error);
     return new NextResponse("Internal Server Error", { status: 500 });
   }
 }

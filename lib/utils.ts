@@ -23,6 +23,9 @@ export function formatCurrency(amount: number | string): string {
   }).format(numericAmount);
 }
 
+export function formatNumber(number: number): string {
+  return new Intl.NumberFormat("th-TH").format(number);
+}
 /**
  * Thai Fiscal Year Months (Oct-Sep)
  */

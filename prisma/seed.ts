@@ -19,7 +19,7 @@ async function main() {
       firstName: "สมชาย",
       lastName: "ใจดี",
       position: "นักวิชาการคอมพิวเตอร์",
-      role: UserRole.OPERATOR,
+      role: "OPERATOR",
     },
   });
 
@@ -31,7 +31,7 @@ async function main() {
       firstName: "สมศรี",
       lastName: "มั่งมี",
       position: "หัวหน้าฝ่ายบริหาร",
-      role: UserRole.DEPT_HEAD,
+      role: "DEPT_HEAD",
     },
   });
 
@@ -43,14 +43,19 @@ async function main() {
       firstName: "อารี",
       lastName: "สุจริต",
       position: "ผู้อำนวยการ",
-      role: UserRole.EXECUTIVE,
+      role: "EXECUTIVE",
     },
   });
 
   // ----------------------------------------------------
-  // 2. สร้างปีงบประมาณ (FiscalYears)
+  // 2. สร้างปีงบประมาณ (FiscalYears) - (เพิ่ม 2565)
   // ----------------------------------------------------
   console.log("Seeding Fiscal Years...");
+  await prisma.fiscalYear.upsert({
+    where: { fiscal_year: 2565 },
+    update: {},
+    create: { fiscal_year: 2565, year_label: "2565" },
+  });
   await prisma.fiscalYear.upsert({
     where: { fiscal_year: 2566 },
     update: {},
@@ -97,7 +102,7 @@ async function main() {
     create: {
       category_code: "REV",
       category_name: "รายรับ",
-      category_type: CategoryType.revenue,
+      category_type: "revenue",
       level: 1,
       display_order: 1,
     },
@@ -108,7 +113,7 @@ async function main() {
     create: {
       category_code: "EXP",
       category_name: "รายจ่าย",
-      category_type: CategoryType.expense,
+      category_type: "expense",
       level: 1,
       display_order: 2,
     },
@@ -121,7 +126,7 @@ async function main() {
     create: {
       category_code: "REV01",
       category_name: "รายรับจากการดำเนินงาน",
-      category_type: CategoryType.revenue,
+      category_type: "revenue",
       level: 2,
       display_order: 1,
       parent_id: revL1.category_id,
@@ -133,7 +138,7 @@ async function main() {
     create: {
       category_code: "EXP01",
       category_name: "รายจ่ายบุคลากร",
-      category_type: CategoryType.expense,
+      category_type: "expense",
       level: 2,
       display_order: 1,
       parent_id: expL1.category_id,
@@ -145,7 +150,7 @@ async function main() {
     create: {
       category_code: "EXP02",
       category_name: "รายจ่ายจากการดำเนินงาน",
-      category_type: CategoryType.expense,
+      category_type: "expense",
       level: 2,
       display_order: 2,
       parent_id: expL1.category_id,
@@ -159,7 +164,7 @@ async function main() {
     create: {
       category_code: "REV0101",
       category_name: "รายรับค่ารักษาพยาบาลสำหรับโครงการสุขภาพถ้วนหน้า UC",
-      category_type: CategoryType.revenue,
+      category_type: "revenue",
       level: 3,
       display_order: 1,
       parent_id: rev01.category_id,
@@ -171,7 +176,7 @@ async function main() {
     create: {
       category_code: "EXP0101",
       category_name: "ค่าจ้างลูกจ้างชั่วคราว / พนักงานกระทรวง",
-      category_type: CategoryType.expense,
+      category_type: "expense",
       level: 3,
       display_order: 1,
       parent_id: exp01.category_id,
@@ -181,9 +186,10 @@ async function main() {
     where: { category_code: "EXP0202" },
     update: {},
     create: {
+      category_id: "l3-nondrug-uuid", //
       category_code: "EXP0202",
       category_name: "ค่าเวชภัณฑ์มิใช่ยา",
-      category_type: CategoryType.expense,
+      category_type: "expense",
       level: 3,
       display_order: 2,
       parent_id: exp02.category_id,
@@ -195,9 +201,10 @@ async function main() {
     where: { category_code: "EXP020201" },
     update: {},
     create: {
+      category_id: "l4-medsupply-uuid", //
       category_code: "EXP020201",
       category_name: "ค่าวัสดุการแพทย์",
-      category_type: CategoryType.expense,
+      category_type: "expense",
       level: 4,
       display_order: 1,
       parent_id: nonDrug.category_id,
@@ -207,9 +214,10 @@ async function main() {
     where: { category_code: "EXP020202" },
     update: {},
     create: {
+      category_id: "l4-scisupply-uuid", //
       category_code: "EXP020202",
       category_name: "ค่าวัสดุวิทยาศาสตร์การแพทย์",
-      category_type: CategoryType.expense,
+      category_type: "expense",
       level: 4,
       display_order: 2,
       parent_id: nonDrug.category_id,
@@ -224,7 +232,7 @@ async function main() {
     create: {
       category_code: "DEPT_LR",
       category_name: "LR",
-      category_type: CategoryType.expense,
+      category_type: "expense",
       level: 2,
       display_order: 10,
       parent_id: expL1.category_id,
@@ -236,7 +244,7 @@ async function main() {
     create: {
       category_code: "DEPT_ER",
       category_name: "ER",
-      category_type: CategoryType.expense,
+      category_type: "expense",
       level: 2,
       display_order: 11,
       parent_id: expL1.category_id,
@@ -248,7 +256,7 @@ async function main() {
     create: {
       category_code: "DEPT_IPD1",
       category_name: "IPD1",
-      category_type: CategoryType.expense,
+      category_type: "expense",
       level: 2,
       display_order: 12,
       parent_id: expL1.category_id,
@@ -260,21 +268,9 @@ async function main() {
     create: {
       category_code: "DEPT_LAB",
       category_name: "LAB",
-      category_type: CategoryType.expense,
+      category_type: "expense",
       level: 2,
       display_order: 13,
-      parent_id: expL1.category_id,
-    },
-  });
-  const pcuDept = await prisma.budgetCategory.upsert({
-    where: { category_code: "DEPT_PCU" },
-    update: {},
-    create: {
-      category_code: "DEPT_PCU",
-      category_name: "PCU",
-      category_type: CategoryType.expense,
-      level: 2,
-      display_order: 14,
       parent_id: expL1.category_id,
     },
   });
@@ -369,230 +365,230 @@ async function main() {
   });
 
   // ----------------------------------------------------
-  // 5. สร้าง "ราย list" (L4 Items) - ตามข้อมูลที่ให้มา
+  // 5. สร้าง "ราย list" (L4 Items)
   // ----------------------------------------------------
   console.log("Seeding Procurement Items (L4)...");
 
-  // รายการวัสดุการแพทย์
-  const item1 = await prisma.procurementItem.create({
-    data: {
+  const item1 = await prisma.procurementItem.upsert({
+    where: { item_id: 1 },
+    update: {},
+    create: {
       item_name: "เครื่องวัดความดันดิจิตอลแบบพกพา",
       procurement_code: "MED-001",
       unit: "เครื่อง",
       quantity: 1,
       unit_price: 2900.0,
       plan_amount: 2900.0,
-      requesting_dept_id: lrDept.category_id,
-      category_id: medSupply.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
+      requestingDept: { connect: { category_id: lrDept.category_id } },
+      category: { connect: { category_id: medSupply.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
     },
   });
 
-  const item2 = await prisma.procurementItem.create({
-    data: {
+  const item2 = await prisma.procurementItem.upsert({
+    where: { item_id: 2 },
+    update: {},
+    create: {
       item_name: "ชุดตรวจคัดกรอง COVID-19 Rapid Test",
       procurement_code: "MED-002",
       unit: "ชุด",
       quantity: 100,
       unit_price: 150.0,
       plan_amount: 15000.0,
-      requesting_dept_id: erDept.category_id,
-      category_id: medSupply.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
+      requestingDept: { connect: { category_id: erDept.category_id } },
+      category: { connect: { category_id: medSupply.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
     },
   });
 
-  const item3 = await prisma.procurementItem.create({
-    data: {
+  const item3 = await prisma.procurementItem.upsert({
+    where: { item_id: 3 },
+    update: {},
+    create: {
       item_name: "สายสวนหลอดเลือดดำ ขนาดต่างๆ",
       procurement_code: "MED-003",
       unit: "ชุด",
       quantity: 50,
       unit_price: 80.0,
       plan_amount: 4000.0,
-      requesting_dept_id: ipd1Dept.category_id,
-      category_id: medSupply.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
+      requestingDept: { connect: { category_id: ipd1Dept.category_id } },
+      category: { connect: { category_id: medSupply.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
     },
   });
 
-  // รายการวัสดุวิทยาศาสตร์การแพทย์
-  const item4 = await prisma.procurementItem.create({
-    data: {
+  const item4 = await prisma.procurementItem.upsert({
+    where: { item_id: 4 },
+    update: {},
+    create: {
       item_name: "สารเคมีตรวจเลือด CBC",
       procurement_code: "SCI-001",
       unit: "ชุด",
       quantity: 20,
       unit_price: 1200.0,
       plan_amount: 24000.0,
-      requesting_dept_id: labDept.category_id,
-      category_id: sciSupply.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
-    },
-  });
-
-  // รายการครุภัณฑ์ต่ำกว่าเกณฑ์ (ตามข้อมูลตัวอย่าง)
-  const item5 = await prisma.procurementItem.create({
-    data: {
-      item_name: "แบตเตอรี่รถยนต์ 12 V 200Ah",
-      procurement_code: "EQP-001",
-      unit: "ก้อน",
-      quantity: 2,
-      unit_price: 7000.0,
-      plan_amount: 14000.0,
-      requesting_dept_id: lrDept.category_id, // งานซ่อมบำรุง
-      category_id: medSupply.category_id, // ใช้ medSupply ชั่วคราว
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
-    },
-  });
-
-  const item6 = await prisma.procurementItem.create({
-    data: {
-      item_name: "บันไดอลูมิเนียม 7 ขั้น",
-      procurement_code: "EQP-002",
-      unit: "ตัว",
-      quantity: 1,
-      unit_price: 1500.0,
-      plan_amount: 1500.0,
-      requesting_dept_id: lrDept.category_id, // งานซ่อมบำรุง
-      category_id: medSupply.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
-    },
-  });
-
-  // รายการวัสดุสำนักงาน
-  const item7 = await prisma.procurementItem.create({
-    data: {
-      item_name: "สติ๊กเกอร์เทอร์มอล ขนาด 5*3 ซม.",
-      procurement_code: "OFF-001",
-      unit: "ม้วน",
-      quantity: 10,
-      unit_price: 150.0,
-      plan_amount: 1500.0,
-      requesting_dept_id: pcuDept.category_id, // PCU
-      category_id: medSupply.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
-    },
-  });
-
-  const item8 = await prisma.procurementItem.create({
-    data: {
-      item_name: "กล่องเอกสาร 3 ช่อง",
-      procurement_code: "OFF-002",
-      unit: "กล่อง",
-      quantity: 4,
-      unit_price: 300.0,
-      plan_amount: 1200.0,
-      requesting_dept_id: pcuDept.category_id, // PCU
-      category_id: medSupply.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
+      requestingDept: { connect: { category_id: labDept.category_id } },
+      category: { connect: { category_id: sciSupply.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
     },
   });
 
   // ----------------------------------------------------
   // 6. สร้าง "ข้อมูลใช้จริงรายเดือน" (MonthlyActualEntry)
+  // (อัปเดตให้ครอบคลุม 5 ปี)
   // ----------------------------------------------------
   console.log("Seeding Monthly Actual Entries (5-Year History)...");
 
-  // ข้อมูลจริงสำหรับเครื่องวัดความดัน (3 ปีย้อนหลัง)
+  // --- 🔴 ปีปัจจุบัน 2569 (ข้อมูลรายเดือน) ---
   await prisma.monthlyActualEntry.create({
     data: {
-      amount: 2800.0,
-      fiscalYear: 2568,
-      month: 10,
-      procurement_item_id: item1.item_id,
-      category_id: item1.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
-    },
-  });
-  await prisma.monthlyActualEntry.create({
-    data: {
-      amount: 2750.0,
-      fiscalYear: 2567,
-      month: 11,
-      procurement_item_id: item1.item_id,
-      category_id: item1.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
-    },
-  });
-  await prisma.monthlyActualEntry.create({
-    data: {
-      amount: 2700.0,
-      fiscalYear: 2566,
-      month: 10,
-      procurement_item_id: item1.item_id,
-      category_id: item1.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
-    },
-  });
-
-  // ข้อมูลจริงสำหรับชุดตรวจ COVID-19
-  await prisma.monthlyActualEntry.create({
-    data: {
-      amount: 6000.0,
-      fiscalYear: 2568,
-      month: 10,
-      procurement_item_id: item2.item_id,
-      category_id: item2.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
-    },
-  });
-  await prisma.monthlyActualEntry.create({
-    data: {
-      amount: 5000.0,
-      fiscalYear: 2568,
-      month: 1,
-      procurement_item_id: item2.item_id,
-      category_id: item2.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
+      amount: 2900.0,
+      fiscalYear: 2569,
+      month: 10, // ต.ค. 68
+      procurementItem: { connect: { item_id: item1.item_id } },
+      category: { connect: { category_id: item1.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
     },
   });
   await prisma.monthlyActualEntry.create({
     data: {
       amount: 7000.0,
-      fiscalYear: 2567,
-      month: 10,
-      procurement_item_id: item2.item_id,
-      category_id: item2.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
+      fiscalYear: 2569,
+      month: 10, // ต.ค. 68
+      procurementItem: { connect: { item_id: item2.item_id } },
+      category: { connect: { category_id: item2.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 8000.0,
+      fiscalYear: 2569,
+      month: 11, // พ.ย. 68
+      procurementItem: { connect: { item_id: item2.item_id } },
+      category: { connect: { category_id: item2.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 4000.0,
+      fiscalYear: 2569,
+      month: 10, // ต.ค. 68
+      procurementItem: { connect: { item_id: item3.item_id } },
+      category: { connect: { category_id: item3.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 12000.0,
+      fiscalYear: 2569,
+      month: 10, // ต.ค. 68
+      procurementItem: { connect: { item_id: item4.item_id } },
+      category: { connect: { category_id: item4.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 12000.0,
+      fiscalYear: 2569,
+      month: 11, // พ.ย. 68
+      procurementItem: { connect: { item_id: item4.item_id } },
+      category: { connect: { category_id: item4.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
     },
   });
 
-  // ข้อมูลจริงสำหรับสารเคมีตรวจเลือด
+  // --- 🔵 ปี 2568 (ยอดรวมปีก่อน) ---
   await prisma.monthlyActualEntry.create({
     data: {
-      amount: 10000.0,
+      amount: 2800.0,
       fiscalYear: 2568,
       month: 10,
-      procurement_item_id: item4.item_id,
-      category_id: item4.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
+      procurementItem: { connect: { item_id: item1.item_id } },
+      category: { connect: { category_id: item1.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
     },
   });
   await prisma.monthlyActualEntry.create({
     data: {
       amount: 11000.0,
       fiscalYear: 2568,
-      month: 1,
-      procurement_item_id: item4.item_id,
-      category_id: item4.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
+      month: 10, // (6000 + 5000)
+      procurementItem: { connect: { item_id: item2.item_id } },
+      category: { connect: { category_id: item2.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 3800.0,
+      fiscalYear: 2568,
+      month: 10,
+      procurementItem: { connect: { item_id: item3.item_id } },
+      category: { connect: { category_id: item3.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 21000.0,
+      fiscalYear: 2568,
+      month: 10, // (10000 + 11000)
+      procurementItem: { connect: { item_id: item4.item_id } },
+      category: { connect: { category_id: item4.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+
+  // --- 🔵 ปี 2567 (ยอดรวมปีก่อน) ---
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 2750.0,
+      fiscalYear: 2567,
+      month: 10,
+      procurementItem: { connect: { item_id: item1.item_id } },
+      category: { connect: { category_id: item1.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 15000.0,
+      fiscalYear: 2567,
+      month: 10, // (7000 + 8000)
+      procurementItem: { connect: { item_id: item2.item_id } },
+      category: { connect: { category_id: item2.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 3500.0,
+      fiscalYear: 2567,
+      month: 10,
+      procurementItem: { connect: { item_id: item3.item_id } },
+      category: { connect: { category_id: item3.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
     },
   });
   await prisma.monthlyActualEntry.create({
@@ -600,34 +596,102 @@ async function main() {
       amount: 9000.0,
       fiscalYear: 2567,
       month: 10,
-      procurement_item_id: item4.item_id,
-      category_id: item4.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
+      procurementItem: { connect: { item_id: item4.item_id } },
+      category: { connect: { category_id: item4.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
     },
   });
 
-  // ข้อมูลจริงสำหรับสติ๊กเกอร์เทอร์มอล (กระจายตามไตรมาส)
+  // --- 🔵 ปี 2566 (ยอดรวมปีก่อน) ---
   await prisma.monthlyActualEntry.create({
     data: {
-      amount: 750.0,
-      fiscalYear: 2569,
-      month: 3, // ไตรมาส 1
-      procurement_item_id: item7.item_id,
-      category_id: item7.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
+      amount: 2700.0,
+      fiscalYear: 2566,
+      month: 10,
+      procurementItem: { connect: { item_id: item1.item_id } },
+      category: { connect: { category_id: item1.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
     },
   });
   await prisma.monthlyActualEntry.create({
     data: {
-      amount: 750.0,
-      fiscalYear: 2569,
-      month: 7, // ไตรมาส 3
-      procurement_item_id: item7.item_id,
-      category_id: item7.category_id,
-      createdById: user1.providerId,
-      updatedById: user1.providerId,
+      amount: 15000.0,
+      fiscalYear: 2566,
+      month: 10,
+      procurementItem: { connect: { item_id: item2.item_id } },
+      category: { connect: { category_id: item2.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 3500.0,
+      fiscalYear: 2566,
+      month: 10,
+      procurementItem: { connect: { item_id: item3.item_id } },
+      category: { connect: { category_id: item3.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 8500.0,
+      fiscalYear: 2566,
+      month: 10,
+      procurementItem: { connect: { item_id: item4.item_id } },
+      category: { connect: { category_id: item4.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+
+  // --- 🔵 ปี 2565 (ยอดรวมปีก่อน) ---
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 2500.0,
+      fiscalYear: 2565,
+      month: 10,
+      procurementItem: { connect: { item_id: item1.item_id } },
+      category: { connect: { category_id: item1.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 20000.0,
+      fiscalYear: 2565,
+      month: 10,
+      procurementItem: { connect: { item_id: item2.item_id } },
+      category: { connect: { category_id: item2.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 3000.0,
+      fiscalYear: 2565,
+      month: 10,
+      procurementItem: { connect: { item_id: item3.item_id } },
+      category: { connect: { category_id: item3.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
+    },
+  });
+  await prisma.monthlyActualEntry.create({
+    data: {
+      amount: 8000.0,
+      fiscalYear: 2565,
+      month: 10,
+      procurementItem: { connect: { item_id: item4.item_id } },
+      category: { connect: { category_id: item4.category_id } },
+      createdBy: { connect: { providerId: user1.providerId } },
+      updatedBy: { connect: { providerId: user1.providerId } },
     },
   });
 
