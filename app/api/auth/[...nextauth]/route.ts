@@ -1,187 +1,279 @@
+// app/api/auth/[...nextauth]/route.ts
 import NextAuth, { NextAuthOptions, DefaultSession } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
-// --- 1. Type Augmentation สำหรับ NextAuth ---
 declare module "next-auth" {
   interface Session {
     user: DefaultSession["user"] & {
       id?: string;
       provider?: string;
+      providerId?: string;
+      role?: string;
+      ialLevel?: number;
+      organization?: any;
     };
+  }
+
+  interface User {
+    id: string;
+    providerId?: string;
+    name?: string | null;
+    email?: string | null;
+    role?: string;
+    ialLevel?: number;
+    organization?: any;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
     provider?: string;
+    providerId?: string;
+    role?: string;
+    ialLevel?: number;
+    organization?: any;
   }
 }
 
-// --- 2. Interfaces สำหรับ Profile Response ---
-interface HealthIdProfileData {
-  account_id: string;
-  first_name_th: string;
-  last_name_th: string;
-}
-
-interface HealthIdProfileResponse {
-  data: HealthIdProfileData;
-}
-
-interface ProviderIdProfileData {
-  account_id: string;
-  name_th: string;
-  email?: string;
-}
-
-interface ProviderIdProfileResponse {
-  data: ProviderIdProfileData;
-}
-
-// --- 3. การดึงและตรวจสอบ Environment Variables ---
-const {
-  HEALTHID_CLIENT_ID,
-  HEALTHID_CLIENT_SECRET,
-  PROVIDER_ID_CLIENT_ID,
-  PROVIDER_ID_CLIENT_SECRET,
-} = process.env;
-
-if (
-  !HEALTHID_CLIENT_ID ||
-  !HEALTHID_CLIENT_SECRET ||
-  !PROVIDER_ID_CLIENT_ID ||
-  !PROVIDER_ID_CLIENT_SECRET
-) {
-  throw new Error(
-    "Missing required environment variables for Auth providers. Please check your .env.local file."
-  );
-}
-
-const HEALTHID_UAT_URL = "https://uat-moph.id.th";
-const PROVIDER_ID_UAT_URL = "https://uat-provider.id.th";
-
-// --- 4. การตั้งค่า authOptions หลัก ---
-export const authOptions: NextAuthOptions = {
-  providers: [
-    // 1. Credentials Provider (Username/Password)
-    CredentialsProvider({
-      name: "Credentials",
-      credentials: {
-        username: { label: "Username", type: "text" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        if (
-          credentials?.username === "admin" &&
-          credentials?.password === "password123"
-        ) {
-          return { id: "1", name: "Admin User", email: "admin@example.com" };
-        }
-        return null;
-      },
-    }),
-
-    // 2. HealthID Provider (Custom OAuth)
-    {
-      id: "healthid",
-      name: "Health ID",
-      type: "oauth",
-      clientId: HEALTHID_CLIENT_ID,
-      clientSecret: HEALTHID_CLIENT_SECRET,
-      authorization: {
-        url: `${HEALTHID_UAT_URL}/oauth/redirect`,
-        params: { response_type: "code" },
-      },
-      token: `${HEALTHID_UAT_URL}/api/v1/token`,
-      userinfo: `${HEALTHID_UAT_URL}/go-api/v1/profile`,
-      profile(profile: HealthIdProfileResponse) {
-        return {
-          id: profile.data.account_id,
-          name: `${profile.data.first_name_th} ${profile.data.last_name_th}`,
-          email: null,
-          image: null,
-        };
-      },
-      checks: ["pkce", "state"],
+// Mock users สำหรับ credentials login
+const mockUsers = [
+  {
+    id: "mock_exec_001",
+    providerId: "mock_exec_001",
+    name: "นพ.พร้อม ใจบริการ (Mock)",
+    email: "exec@example.com",
+    role: "EXECUTIVE",
+    ialLevel: 3.0,
+    organization: {
+      hname_th: "โรงพยาบาลตัวอย่าง",
+      position: "ผู้อำนวยการโรงพยาบาล",
     },
+  },
+  {
+    id: "mock_dept_001",
+    providerId: "mock_dept_001",
+    name: "พญ.สมใจ ดูแลดี (Mock)",
+    email: "dept@example.com",
+    role: "DEPT_HEAD",
+    ialLevel: 2.8,
+    organization: {
+      hname_th: "โรงพยาบาลตัวอย่าง",
+      position: "หัวหน้าแผนกเวชปฏิบัติ",
+    },
+  },
+  {
+    id: "mock_op_001",
+    providerId: "mock_op_001",
+    name: "นางสาวปฏิบัติ งานดี (Mock)",
+    email: "operator@example.com",
+    role: "OPERATOR",
+    ialLevel: 2.5,
+    organization: {
+      hname_th: "โรงพยาบาลตัวอย่าง",
+      position: "เจ้าหน้าที่พัสดุ",
+    },
+  },
+  {
+    id: "mock_group_001",
+    providerId: "mock_group_001",
+    name: "นายกลุ่ม งานนำ (Mock)",
+    email: "group@example.com",
+    role: "GROUP_HEAD",
+    ialLevel: 2.7,
+    organization: {
+      hname_th: "โรงพยาบาลตัวอย่าง",
+      position: "หัวหน้ากลุ่มงานพัสดุ",
+    },
+  },
+];
 
-    // 3. Provider ID Provider (Custom OAuth)
-    {
-      id: "provider-id",
-      name: "Provider ID",
-      type: "oauth",
-      clientId: PROVIDER_ID_CLIENT_ID,
-      clientSecret: PROVIDER_ID_CLIENT_SECRET,
-      authorization: {
-        url: `${PROVIDER_ID_UAT_URL}/v1/oauth2/authorize`,
-        params: {
-          response_type: "code",
-          scope: "cid name_th name_eng email mobile_number",
-        },
+// ตรวจสอบว่า Provider ID environment variables มีครบหรือไม่
+const isProviderIdConfigured =
+  process.env.PROVIDER_ID_URL &&
+  process.env.PROVIDER_ID_CLIENT_ID &&
+  process.env.PROVIDER_ID_CLIENT_SECRET;
+
+console.log("Provider ID Configuration:", {
+  hasUrl: !!process.env.PROVIDER_ID_URL,
+  hasClientId: !!process.env.PROVIDER_ID_CLIENT_ID,
+  hasClientSecret: !!process.env.PROVIDER_ID_CLIENT_SECRET,
+  isConfigured: isProviderIdConfigured,
+});
+
+const providers = [
+  // 1. Credentials Provider (สำหรับ mock login) - ใช้เป็นหลัก
+  CredentialsProvider({
+    id: "credentials",
+    name: "Mock Login",
+    credentials: {
+      username: {
+        label: "Username",
+        type: "text",
+        placeholder: "exec, dept, group, or op",
       },
-      token: `${PROVIDER_ID_UAT_URL}/v1/oauth2/token`,
-      userinfo: {
-        url: `${PROVIDER_ID_UAT_URL}/api/v1/services/profile`,
-        async request(context) {
-          const url = `${PROVIDER_ID_UAT_URL}/api/v1/services/profile`;
+      password: {
+        label: "Password",
+        type: "password",
+        placeholder: "ใช้ password อะไรก็ได้",
+      },
+    },
+    async authorize(credentials) {
+      console.log("Credentials authorize called:", credentials);
 
-          const res = await fetch(url, {
-            headers: {
-              Authorization: `Bearer ${context.tokens.access_token}`,
-              "client-id": context.provider.clientId!,
-              "secret-key": context.provider.clientSecret!,
-              "Content-Type": "application/json",
-            },
-          });
+      if (!credentials?.username) {
+        console.log("No username provided");
+        return null;
+      }
 
-          if (!res.ok) {
-            const errorText = await res.text();
-            throw new Error(
-              `Failed to fetch Provider ID profile: ${res.status} ${errorText}`
-            );
+      // Map username to mock user
+      let user;
+      switch (credentials.username.toLowerCase()) {
+        case "exec":
+          user = mockUsers[0];
+          break;
+        case "dept":
+          user = mockUsers[1];
+          break;
+        case "group":
+          user = mockUsers[3];
+          break;
+        case "op":
+          user = mockUsers[2];
+          break;
+        default:
+          console.log("Invalid username:", credentials.username);
+          return null;
+      }
+
+      // สำหรับ mock login รับ password ใดๆ ก็ได้
+      if (user) {
+        console.log("Mock user found:", user);
+        return user;
+      }
+
+      return null;
+    },
+  }),
+];
+
+// เพิ่ม Provider ID เฉพาะเมื่อ configure ครบ
+if (isProviderIdConfigured) {
+  providers.push({
+    id: "provider-id",
+    name: "Provider ID",
+    type: "oauth",
+    clientId: process.env.PROVIDER_ID_CLIENT_ID!,
+    clientSecret: process.env.PROVIDER_ID_CLIENT_SECRET!,
+    authorization: {
+      url: `${process.env.PROVIDER_ID_URL}/v1/oauth2/authorize`,
+      params: {
+        response_type: "code",
+        scope: "cid name_th name_eng email mobile_number organization",
+      },
+    },
+    token: `${process.env.PROVIDER_ID_URL}/v1/oauth2/token`,
+    userinfo: {
+      url: `${process.env.PROVIDER_ID_URL}/api/v1/services/profile`,
+      async request({ tokens, provider }) {
+        try {
+          const response = await fetch(
+            `${process.env.PROVIDER_ID_URL}/api/v1/services/profile`,
+            {
+              headers: {
+                Authorization: `Bearer ${tokens.access_token}`,
+                "client-id": provider.clientId!,
+                "secret-key": provider.clientSecret!,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error("Failed to fetch user profile");
           }
 
-          return await res.json();
-        },
+          const profileData = await response.json();
+          return profileData.data;
+        } catch (error) {
+          console.error("Error fetching provider profile:", error);
+          throw error;
+        }
       },
-      profile(profile: ProviderIdProfileResponse) {
-        return {
-          id: profile.data.account_id,
-          name: profile.data.name_th || null,
-          email: profile.data.email || null,
-          image: null,
-        };
-      },
-      checks: ["pkce", "state"],
     },
-  ],
+    async profile(profile) {
+      // สำหรับ demo ใช้ mock data แทน
+      return {
+        id: profile.account_id || "provider_user_001",
+        providerId: profile.account_id,
+        name: profile.name_th || "Provider ID User",
+        email: profile.email || "provider@example.com",
+        role: "OPERATOR",
+        ialLevel: profile.ial_level || 2.5,
+        organization: profile.organization?.[0] || {
+          hname_th: "โรงพยาบาลจาก Provider ID",
+          position: "บุคลากรทางการแพทย์",
+        },
+      };
+    },
+    checks: ["pkce", "state"],
+  } as any);
+} else {
+  console.log("⚠️ Provider ID is not configured. Using Mock Login only.");
+}
 
-  // --- 5. Session และ Callbacks ---
+export const authOptions: NextAuthOptions = {
+  providers,
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   pages: {
     signIn: "/",
+    signOut: "/",
+    error: "/auth/error",
   },
   callbacks: {
-    async jwt({ token, account }) {
+    async jwt({ token, account, user }) {
+      console.log("JWT callback:", { token, account, user });
+
       if (account) {
         token.provider = account.provider;
+      }
+      if (user) {
+        token.id = user.id;
+        token.providerId = user.providerId;
+        token.role = user.role;
+        token.ialLevel = user.ialLevel;
+        token.organization = user.organization;
       }
       return token;
     },
     async session({ session, token }) {
+      console.log("Session callback:", { session, token });
+
       if (session.user) {
-        if (token.sub) {
-          session.user.id = token.sub;
-        }
-        if (token.provider) {
-          session.user.provider = token.provider;
-        }
+        session.user.id = token.id as string;
+        session.user.provider = token.provider as string;
+        session.user.providerId = token.providerId as string;
+        session.user.role = token.role as string;
+        session.user.ialLevel = token.ialLevel as number;
+        session.user.organization = token.organization as any;
       }
       return session;
     },
+    async signIn({ user, account, profile }) {
+      console.log("SignIn callback:", { user, account, profile });
+      return true;
+    },
+    async redirect({ url, baseUrl }) {
+      console.log("Redirect callback:", { url, baseUrl });
+
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      else if (new URL(url).origin === baseUrl) return url;
+      return baseUrl + "/dashboard";
+    },
   },
+  debug: process.env.NODE_ENV === "development",
 };
 
 const handler = NextAuth(authOptions);

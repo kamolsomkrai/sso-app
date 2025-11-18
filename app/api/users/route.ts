@@ -1,35 +1,54 @@
-// app/api/users/route.ts
-import { NextRequest, NextResponse } from "next/server";
+// app/api/auth/user/route.ts
+import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { getServerSession } from "next-auth";
+import { authOptions } from "../[...nextauth]/route";
 
 const prisma = new PrismaClient();
 
-// GET /api/users - ดึงข้อมูลผู้ใช้
 export async function GET() {
   try {
-    const users = await prisma.user.findMany({
+    const session = await getServerSession(authOptions);
+
+    console.log("API /auth/user: Session", session);
+
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
       select: {
+        id: true,
         providerId: true,
-        firstName: true,
-        lastName: true,
-        position: true,
+        name: true,
+        email: true,
         role: true,
-        _count: {
-          select: {
-            createdItems: true,
-            createdEntries: true,
-          },
-        },
+        firstNameTh: true,
+        lastNameTh: true,
+        organizationHnameTh: true,
+        organizationPosition: true,
+        ialLevel: true,
+        isDirector: true,
+        isHrAdmin: true,
+        createdAt: true,
       },
-      orderBy: [{ role: "asc" }, { firstName: "asc" }],
     });
 
-    return NextResponse.json({ success: true, data: users });
+    console.log("API /auth/user: Found user", user);
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ user });
   } catch (error) {
-    console.error("Error fetching users:", error);
+    console.error("Error fetching user:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to fetch users" },
+      { error: "Failed to fetch user" },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }

@@ -1,26 +1,11 @@
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
+// schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
 
-// Model สำหรับผู้ใช้งาน
-model User {
-  id        String   @id @default(cuid())
-  clerkId   String   @unique // ใช้ Clerk ID หรือ ID จากระบบ Auth ของคุณ
-  email     String   @unique
-  name      String
-  role      UserRole @default(OPERATOR)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // ความสัมพันธ์: ผู้ใช้สร้างรายการอะไรบ้าง
-  createdItems   ProcurementItem[]  @relation("CreatedBy")
-  updatedItems   ProcurementItem[]  @relation("UpdatedBy")
-  createdEntries MonthlyActualEntry[] @relation("RecordedBy")
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum UserRole {
@@ -30,115 +15,291 @@ enum UserRole {
   OPERATOR
 }
 
-// Model หลักสำหรับหมวดหมู่งบประมาณ (L1-L4)
+enum CategoryType {
+  REVENUE
+  EXPENSE
+}
+
+enum ProcurementType {
+  BIDDING
+  QUOTATION
+  DIRECT_PURCHASE
+  EMERGENCY
+}
+
+model User {
+  id String @id @default(cuid())
+
+  // Provider ID Fields
+  providerId   String? @unique @map("provider_id")
+  cid          String? @db.VarChar(13)
+  email        String?
+  name         String?
+  firstNameTh  String? @map("first_name_th")
+  lastNameTh   String? @map("last_name_th")
+  firstNameEn  String? @map("first_name_en")
+  lastNameEn   String? @map("last_name_en")
+  titleTh      String? @map("title_th")
+  titleEn      String? @map("title_en")
+  mobileNumber String? @map("mobile_number") @db.VarChar(10)
+
+  // Organization Info
+  organizationBusinessId   String? @map("org_business_id")
+  organizationHcode        String? @map("org_hcode") @db.VarChar(9)
+  organizationHnameTh      String? @map("org_hname_th")
+  organizationPosition     String? @map("org_position")
+  organizationPositionType String? @map("org_position_type")
+
+  // Authentication & Authorization
+  ialLevel   Float?   @map("ial_level")
+  isHrAdmin  Boolean? @default(false) @map("is_hr_admin")
+  isDirector Boolean? @default(false) @map("is_director")
+  role       UserRole
+
+  // Legacy field
+  clerkId String? @unique @map("clerk_id")
+
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  lastLoginAt DateTime? @map("last_login_at")
+
+  // Relations
+  createdItems      ProcurementItem[]    @relation("UserCreatedItems")
+  updatedItems      ProcurementItem[]    @relation("UserUpdatedItems")
+  createdEntries    MonthlyActualEntry[] @relation("UserCreatedEntries")
+  recordedEntries   MonthlyActualEntry[] @relation("UserRecordedEntries")
+  auditLogs         AuditLog[]           @relation("UserAuditLogs")
+  uploadedDocuments Document[]           @relation("UserDocuments")
+
+  // Indexes
+  @@index([providerId])
+  @@index([cid])
+  @@index([email])
+  @@index([role])
+  @@index([organizationHcode])
+  @@index([createdAt])
+  @@index([lastLoginAt])
+  @@map("users")
+}
+
 model BudgetCategory {
-  id           String   @id @default(cuid())
-  categoryCode String   @unique // รหัสหมวดหมู่ (เช่น "REV", "EXP", "EXP-OP", "EXP-OP-MED")
-  categoryName String   // ชื่อหมวดหมู่ (เช่น "รายรับ", "รายจ่าย", "ค่าเวชภัณฑ์มิใช่ยา")
-  level        Int      // 1, 2, 3, หรือ 4
-  categoryType String   // "revenue" หรือ "expense"
-  icon         String?  // ชื่อ icon จาก lucide-react (เช่น "TrendingUp", "DollarSign")
+  id String @id @default(cuid())
 
-  // ความสัมพันธ์แบบ Self-referencing (Tree structure)
-  parentId String?
-  parent   BudgetCategory? @relation("CategoryTree", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  children BudgetCategory[] @relation("CategoryTree")
+  // Category Identification
+  categoryCode String       @unique @map("category_code") @db.VarChar(20)
+  categoryName String       @map("category_name")
+  level        Int
+  categoryType CategoryType @map("category_type")
+  icon         String?
+  description  String?
 
-  // ความสัมพันธ์: หมวดหมู่นี้มีแผนงบประมาณอะไรบ้าง
-  planData PlanFinancialData[]
+  // Hierarchy
+  parentId String?          @map("parent_id")
+  parent   BudgetCategory?  @relation("CategoryChildren", fields: [parentId], references: [id])
+  children BudgetCategory[] @relation("CategoryChildren")
 
-  // ความสัมพันธ์: หมวดหมู่นี้ (L4) มีรายการจัดซื้ออะไรบ้าง
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  planData         PlanFinancialData[]
+  actualEntries    MonthlyActualEntry[]
   procurementItems ProcurementItem[]
 
-  // ความสัมพันธ์: หมวดหมู่นี้มีการบันทึกยอดใช้จริง (ที่ไม่ผูกกับ Item) อะไรบ้าง
-  monthlyEntries MonthlyActualEntry[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  // Indexes
+  @@index([categoryCode])
+  @@index([categoryType])
+  @@index([level])
   @@index([parentId])
+  @@index([categoryCode, level])
+  @@index([categoryType, level])
+  @@map("budget_categories")
 }
 
-// Model สำหรับรายการจัดซื้อ (L4 Items)
 model ProcurementItem {
-  id              String   @id @default(cuid())
-  itemName        String   // ชื่อรายการ (เช่น "หน้ากากอนามัยทางการแพทย์")
-  unitName        String   // หน่วยนับ (เช่น "กล่อง", "ชิ้น")
-  inventory       Int      @default(0) // จำนวนคงคลัง (เพิ่มใหม่)
-  procurementType String?  // วิธีจัดหา (เช่น "ประกวดราคา", "สอบราคา")
+  id String @id @default(cuid())
 
-  // ความสัมพันธ์: รายการนี้อยู่ใต้หมวดหมู่ L4 ไหน
-  categoryId String
+  // Item Information
+  itemName        String          @map("item_name")
+  unitName        String          @map("unit_name") @db.VarChar(20)
+  inventory       Int             @default(0)
+  procurementType ProcurementType @map("procurement_type")
+  specifications  String?
+  minStockLevel   Int?            @default(0) @map("min_stock_level")
+  maxStockLevel   Int?            @map("max_stock_level")
+
+  // Pricing
+  unitPrice         Decimal? @map("unit_price") @db.Decimal(10, 2)
+  lastPurchasePrice Decimal? @map("last_purchase_price") @db.Decimal(10, 2)
+
+  // Relations
+  categoryId String         @map("category_id")
   category   BudgetCategory @relation(fields: [categoryId], references: [id])
 
-  // ความสัมพันธ์: รายการนี้ใครเป็นคนสร้าง/อัปเดต
-  createdById String
-  createdBy   User     @relation("CreatedBy", fields: [createdById], references: [id])
-  updatedById String
-  updatedBy   User     @relation("UpdatedBy", fields: [updatedById], references: [id])
+  createdById String @map("created_by_id")
+  createdBy   User   @relation("UserCreatedItems", fields: [createdById], references: [id])
 
-  // ความสัมพันธ์: รายการนี้มียอดแผนเท่าไหร่
-  planData PlanFinancialData[]
+  updatedById String @map("updated_by_id")
+  updatedBy   User   @relation("UserUpdatedItems", fields: [updatedById], references: [id])
 
-  // ความสัมพันธ์: รายการนี้มียอดใช้จริงเท่าไหร่
-  monthlyEntries MonthlyActualEntry[]
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // Relations
+  planData      PlanFinancialData[]
+  actualEntries MonthlyActualEntry[]
+  documents     Document[]
 
+  // Indexes
+  @@index([itemName])
   @@index([categoryId])
+  @@index([procurementType])
+  @@index([inventory])
   @@index([createdById])
-  @@index([updatedById])
+  @@index([updatedAt])
+  @@map("procurement_items")
 }
 
-// Model สำหรับ "แผน" งบประมาณ
 model PlanFinancialData {
-  id         String   @id @default(cuid())
-  fiscalYear Int      // ปีงบประมาณ (เช่น 2567, 2568)
-  planAmount Decimal  @default(0) // ยอดแผน (อาจจะเป็น L1, L2, L3, L4, หรือ Item)
+  id String @id @default(cuid())
 
-  // ความสัมพันธ์: แผนนี้เป็นของหมวดหมู่ไหน (L1-L4)
-  categoryId String
-  category   BudgetCategory @relation(fields: [categoryId], references: [id])
+  // Financial Data
+  fiscalYear Int     @map("fiscal_year")
+  planAmount Decimal @map("plan_amount") @db.Decimal(15, 2)
 
-  // ความสัมพันธ์: (Optional) แผนนี้เป็นของ Item ไหน
-  procurementItemId String?
+  // Optional Relations
+  categoryId String?         @map("category_id")
+  category   BudgetCategory? @relation(fields: [categoryId], references: [id])
+
+  procurementItemId String?          @map("procurement_item_id")
   procurementItem   ProcurementItem? @relation(fields: [procurementItemId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // Metadata
+  planVersion Int?      @default(1) @map("plan_version")
+  isApproved  Boolean   @default(false) @map("is_approved")
+  approvedAt  DateTime? @map("approved_at")
+  notes       String?
 
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Indexes
+  @@unique([fiscalYear, categoryId, procurementItemId, planVersion], name: "plan_unique_constraint")
+  @@index([fiscalYear])
   @@index([categoryId])
   @@index([procurementItemId])
+  @@index([fiscalYear, categoryId])
+  @@index([fiscalYear, procurementItemId])
+  @@index([isApproved])
+  @@index([createdAt])
+  @@map("plan_financial_data")
 }
 
-// Model สำหรับ "ยอดใช้จริง" (Actual)
 model MonthlyActualEntry {
-  id         String   @id @default(cuid())
-  fiscalYear Int      // ปีงบประมาณ
-  month      Int      // เดือน (1-12)
-  entryDate  DateTime // วันที่บันทึกจริง
-  amount     Decimal  // ยอดเงิน
-  quantity   Int?     // จำนวน (ถ้ามี)
-  notes      String?  // หมายเหตุ
+  id String @id @default(cuid())
 
-  // ความสัมพันธ์: ยอดนี้เป็นของหมวดหมู่ไหน (L1-L4)
-  categoryId String
+  // Entry Information
+  fiscalYear Int      @map("fiscal_year")
+  month      Int
+  entryDate  DateTime @map("entry_date")
+  amount     Decimal  @db.Decimal(15, 2)
+  quantity   Int?
+  notes      String?
+
+  // Relations
+  categoryId String         @map("category_id")
   category   BudgetCategory @relation(fields: [categoryId], references: [id])
 
-  // ความสัมพันธ์: (Optional) ยอดนี้เป็นของ Item ไหน
-  procurementItemId String?
-  procurementItem   ProcurementItem? @relation(fields: [procurementItemId], references: [id], onDelete: SetNull)
+  procurementItemId String?          @map("procurement_item_id")
+  procurementItem   ProcurementItem? @relation(fields: [procurementItemId], references: [id])
 
-  // ความสัมพันธ์: ใครเป็นคนบันทึก
-  recordedById String
-  recordedBy   User     @relation("RecordedBy", fields: [recordedById], references: [id])
+  recordedById String @map("recorded_by_id")
+  recordedBy   User   @relation("UserRecordedEntries", fields: [recordedById], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdById String? @map("created_by_id")
+  createdBy   User?   @relation("UserCreatedEntries", fields: [createdById], references: [id])
 
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  documents Document[]
+
+  // Indexes
+  @@unique([fiscalYear, month, categoryId, procurementItemId], name: "actual_entry_unique_constraint")
+  @@index([fiscalYear])
+  @@index([month])
+  @@index([fiscalYear, month])
   @@index([categoryId])
   @@index([procurementItemId])
   @@index([recordedById])
-  @@index([fiscalYear, month])
+  @@index([createdById])
+  @@index([entryDate])
+  @@index([createdAt])
+  @@map("monthly_actual_entries")
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  // Action Information
+  action      String
+  entityType  String  @map("entity_type")
+  entityId    String  @map("entity_id")
+  oldValues   Json?   @map("old_values")
+  newValues   Json?   @map("new_values")
+  description String?
+
+  // User who performed the action
+  performedById String @map("performed_by_id")
+  performedBy   User   @relation("UserAuditLogs", fields: [performedById], references: [id])
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Indexes
+  @@index([action])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([performedById])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Document {
+  id String @id @default(cuid())
+
+  // File Information
+  fileName String @map("file_name")
+  filePath String @map("file_path")
+  fileSize Int    @map("file_size")
+  mimeType String @map("mime_type")
+
+  // Relations
+  procurementItemId String?          @map("procurement_item_id")
+  procurementItem   ProcurementItem? @relation(fields: [procurementItemId], references: [id])
+
+  monthlyEntryId String?             @map("monthly_entry_id")
+  monthlyEntry   MonthlyActualEntry? @relation(fields: [monthlyEntryId], references: [id])
+
+  // Metadata
+  uploadedById String  @map("uploaded_by_id")
+  uploadedBy   User    @relation("UserDocuments", fields: [uploadedById], references: [id])
+  description  String?
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Indexes
+  @@index([procurementItemId])
+  @@index([monthlyEntryId])
+  @@index([uploadedById])
+  @@index([createdAt])
+  @@map("documents")
 }

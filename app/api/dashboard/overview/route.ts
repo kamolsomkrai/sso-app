@@ -1,6 +1,6 @@
 // app/api/dashboard/overview/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, CategoryType } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 
 const prisma = new PrismaClient();
@@ -29,9 +29,9 @@ function calculateKpi(
   };
 }
 
-// Helper to get plan amount
+// Helper to get plan amount - FIXED: ใช้ findMany แทน findFirst
 async function getPlan(fiscalYear: number, categoryCode: string) {
-  const plan = await prisma.planFinancialData.findFirst({
+  const plans = await prisma.planFinancialData.findMany({
     where: {
       fiscalYear: fiscalYear,
       category: {
@@ -42,13 +42,20 @@ async function getPlan(fiscalYear: number, categoryCode: string) {
       planAmount: true,
     },
   });
-  return plan?.planAmount ?? new Decimal(0);
+
+  // Sum all plan amounts for this category
+  const totalPlan = plans.reduce(
+    (sum, plan) => sum.add(plan.planAmount),
+    new Decimal(0)
+  );
+
+  return totalPlan;
 }
 
-// Helper to get actual amount
+// Helper to get actual amount - FIXED: ใช้ CategoryType enum
 async function getActual(
   fiscalYear: number,
-  categoryType: "revenue" | "expense"
+  categoryType: CategoryType // ใช้ CategoryType enum แทน string
 ) {
   const result = await prisma.monthlyActualEntry.aggregate({
     _sum: {
@@ -57,7 +64,7 @@ async function getActual(
     where: {
       fiscalYear: fiscalYear,
       category: {
-        categoryType: categoryType,
+        categoryType: categoryType, // ใช้ enum value
       },
     },
   });
@@ -66,8 +73,14 @@ async function getActual(
 
 // Helper for monthly/quarterly data
 const fiscalMonths = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-const getQuarter = (month: number) =>
-  Math.floor((fiscalMonths.indexOf(month) + 3) / 3);
+
+// FIXED: ฟังก์ชันคำนวณ quarter ที่ถูกต้อง
+const getQuarter = (month: number) => {
+  if ([10, 11, 12].includes(month)) return 1; // Oct-Dec = Q1
+  if ([1, 2, 3].includes(month)) return 2; // Jan-Mar = Q2
+  if ([4, 5, 6].includes(month)) return 3; // Apr-Jun = Q3
+  return 4; // Jul-Sep = Q4
+};
 
 export async function GET(request: Request) {
   try {
@@ -81,14 +94,21 @@ export async function GET(request: Request) {
       );
     }
 
+    console.log(`Fetching overview data for fiscal year: ${fiscalYear}`);
+
     // --- 1. Financial Summary (KPIs) ---
     const [planRevenue, planExpense, actualRevenue, actualExpense] =
       await Promise.all([
         getPlan(fiscalYear, "REV"),
         getPlan(fiscalYear, "EXP"),
-        getActual(fiscalYear, "revenue"),
-        getActual(fiscalYear, "expense"),
+        getActual(fiscalYear, CategoryType.REVENUE), // ใช้ enum
+        getActual(fiscalYear, CategoryType.EXPENSE), // ใช้ enum
       ]);
+
+    console.log("Plan Revenue:", Number(planRevenue));
+    console.log("Plan Expense:", Number(planExpense));
+    console.log("Actual Revenue:", Number(actualRevenue));
+    console.log("Actual Expense:", Number(actualExpense));
 
     const totalRevenue = calculateKpi(actualRevenue, planRevenue);
     const totalExpense = calculateKpi(actualExpense, planExpense);
@@ -104,15 +124,12 @@ export async function GET(request: Request) {
     };
 
     // --- 2. Revenue vs Expense Chart Data ---
-    // Original groupBy was incorrect as categoryType is on a related table.
-    // Fetch all entries and aggregate in code instead.
+    // FIXED: ดึงข้อมูลพร้อม relation ให้ครบ
     const allEntries = await prisma.monthlyActualEntry.findMany({
       where: {
         fiscalYear: fiscalYear,
       },
-      select: {
-        month: true,
-        amount: true,
+      include: {
         category: {
           select: {
             categoryType: true,
@@ -120,6 +137,8 @@ export async function GET(request: Request) {
         },
       },
     });
+
+    console.log(`Found ${allEntries.length} entries for FY ${fiscalYear}`);
 
     const monthlyData: {
       month: number;
@@ -142,22 +161,25 @@ export async function GET(request: Request) {
       { quarter: 4, revenue: 0, expense: 0 },
     ];
 
+    // FIXED: aggregate ข้อมูลที่ถูกต้อง
     for (const entry of allEntries) {
-      //
       const monthIndex = fiscalMonths.indexOf(entry.month);
       if (monthIndex === -1) continue;
 
-      const amount = Number(entry.amount ?? 0); //
-      const quarterIndex = getQuarter(entry.month) - 1;
+      const amount = Number(entry.amount ?? 0);
+      const quarter = getQuarter(entry.month);
+      const quarterIndex = quarter - 1;
 
-      if (entry.category.categoryType === "revenue") {
-        //
+      if (entry.category?.categoryType === CategoryType.REVENUE) {
         monthlyData[monthIndex].revenue += amount;
-        if (quarterIndex >= 0) quarterlyData[quarterIndex].revenue += amount; //
-      } else if (entry.category.categoryType === "expense") {
-        //
+        if (quarterIndex >= 0 && quarterIndex < 4) {
+          quarterlyData[quarterIndex].revenue += amount;
+        }
+      } else if (entry.category?.categoryType === CategoryType.EXPENSE) {
         monthlyData[monthIndex].expense += amount;
-        if (quarterIndex >= 0) quarterlyData[quarterIndex].expense += amount; //
+        if (quarterIndex >= 0 && quarterIndex < 4) {
+          quarterlyData[quarterIndex].expense += amount;
+        }
       }
     }
 
@@ -170,11 +192,19 @@ export async function GET(request: Request) {
     return NextResponse.json({
       summary,
       revenueData,
+      debug: {
+        fiscalYear,
+        entryCount: allEntries.length,
+        planRevenue: Number(planRevenue),
+        planExpense: Number(planExpense),
+        actualRevenue: Number(actualRevenue),
+        actualExpense: Number(actualExpense),
+      },
     });
   } catch (error) {
     console.error("API Error: /api/dashboard/overview", error);
     return NextResponse.json(
-      { error: "Failed to fetch overview data" },
+      { error: "Failed to fetch overview data", details: String(error) },
       { status: 500 }
     );
   }

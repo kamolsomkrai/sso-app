@@ -1,3 +1,4 @@
+// app/(app)/layout.tsx
 'use client';
 
 import { useAuth } from '@/components/auth-provider';
@@ -13,37 +14,37 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, logout, isLoading } = useAuth();
+  const { user, signOut, isLoading } = useAuth();
   const router = useRouter();
 
   // ตรวจสอบสิทธิ์
   useEffect(() => {
-    // 1. ถ้าระบบกำลังโหลดข้อมูลผู้ใช้ (isLoading) ให้รอ
-    if (isLoading) {
-      return;
-    }
-
-    // 2. ถ้าโหลดเสร็จแล้ว (isLoading = false)
-    // และไม่พบข้อมูลผู้ใช้ (!user) ให้เด้งไปหน้า login
-    if (!user) {
+    if (!isLoading && !user) {
       router.push('/');
     }
-
-    // 3. ถ้าโหลดเสร็จแล้ว และมี user ก็ปล่อยให้ทำงานต่อ (แสดง children)
   }, [user, isLoading, router]);
 
-  const handleLogout = () => {
-    logout();
-    router.push('/');
-  };
-
   // --- สถานะกำลังโหลด ---
-  if (isLoading || !user) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="p-8 bg-white rounded-lg shadow-md text-center">
           <p className="mb-4">กำลังโหลดข้อมูลผู้ใช้...</p>
           <Skeleton className="h-10 w-40 mx-auto" />
+        </div>
+      </div>
+    );
+  }
+
+  // --- ตรวจสอบว่าผู้ใช้ล็อกอินหรือไม่ ---
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="p-8 bg-white rounded-lg shadow-md text-center">
+          <p className="mb-4">กรุณาเข้าสู่ระบบก่อน</p>
+          <Button onClick={() => router.push('/')}>
+            ไปหน้าล็อกอิน
+          </Button>
         </div>
       </div>
     );
@@ -63,7 +64,10 @@ export default function DashboardLayout({
             {/* User Info */}
             <div className="text-right hidden sm:block">
               <p className="font-semibold text-sm">{user.name}</p>
-              <p className="text-xs text-gray-500">{user.role}</p>
+              <p className="text-xs text-gray-500">
+                {user.organizationPosition} • {user.role}
+                {user.organizationHnameTh && ` • ${user.organizationHnameTh}`}
+              </p>
             </div>
             <UserCircle className="h-8 w-8 text-gray-400" />
 
@@ -83,9 +87,9 @@ export default function DashboardLayout({
             </Link>
 
             {/* Logout Button */}
-            <Button variant="outline" size="sm" onClick={handleLogout}>
+            <Button variant="outline" size="sm" onClick={signOut}>
               <LogOut className="h-4 w-4 mr-2" />
-              Logout
+              ออกจากระบบ
             </Button>
           </div>
         </div>
