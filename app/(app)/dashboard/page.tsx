@@ -1,170 +1,161 @@
-// app/(app)/dashboard/page.tsx
 'use client';
 
-import { useState } from 'react';
+import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
-import { DashboardHeader } from '@/components/dashboard/dashboard-header';
-import { KPICard } from '@/components/dashboard/kpi-cards';
-import { MonthlyTrendChart } from '@/components/dashboard/monthly-trend-chart';
-import { CategoryBreakdownChart } from '@/components/dashboard/category-breakdown-chart';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AlertCircle } from 'lucide-react';
+
+// Import Dashboard Components
+import { FinancialOverview } from '@/components/dashboard/financial-overview';
+import { RevenueExpenseChart } from '@/components/dashboard/revenue-expense-chart';
+import { ExpenseDrilldown } from '@/components/dashboard/expense-drilldown';
+
+// Import Types
+import { OverviewApiResponse } from '@/lib/types';
+import { getCurrentFiscalYear } from '@/lib/utils';
+
+// --- Helper Functions ---
+async function fetchOverviewData(
+  fiscalYear: number,
+): Promise<OverviewApiResponse> {
+  const { data } = await axios.get('/api/dashboard/overview', {
+    params: { fiscalYear },
+  });
+  return data;
+}
+// ------------------------
 
 export default function DashboardPage() {
-  const [fiscalYear, setFiscalYear] = useState(2569);
+  const [fiscalYear, setFiscalYear] = React.useState<number>(
+    getCurrentFiscalYear(),
+  );
+  const [timeframe, setTimeframe] = React.useState<'monthly' | 'quarterly'>(
+    'monthly',
+  );
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboard-summary', fiscalYear],
-    queryFn: async () => {
-      const { data } = await axios.get('/api/dashboard/l1-summary', {
-        params: { fiscalYear }
-      });
-      return data;
-    },
-  });
+  const { data, isLoading, error, isRefetching } =
+    useQuery<OverviewApiResponse>({
+      queryKey: ['dashboardOverview', fiscalYear],
+      queryFn: () => fetchOverviewData(fiscalYear),
+      // staleTime: 1000 * 60 * 5, // 5 minutes
+      // refetchOnWindowFocus: false,
+    });
 
-  const handleExport = () => {
-    // Implement export functionality
-    console.log('Export data for year:', fiscalYear);
+  const handleYearChange = (yearString: string) => {
+    setFiscalYear(parseInt(yearString));
   };
 
-  if (error) {
-    return (
-      <div className="p-6">
-        <div className="text-center text-red-600">
-          เกิดข้อผิดพลาดในการโหลดข้อมูล
-        </div>
-      </div>
-    );
-  }
+  // Generate year options (e.g., 2567, 2566, 2565)
+  const currentYear = getCurrentFiscalYear();
+  const yearOptions = [
+    currentYear,
+    currentYear - 1,
+    currentYear - 2,
+    currentYear - 3,
+  ];
 
   return (
-    <div className="space-y-6 p-6">
-      <DashboardHeader
-        fiscalYear={fiscalYear}
-        onFiscalYearChange={setFiscalYear}
-        onExport={handleExport}
-      />
+    <div className="space-y-6">
+      {/* --- Header & Filters --- */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+        <h2 className="text-3xl font-bold tracking-tight">
+          ภาพรวม Dashboard
+        </h2>
+        <div className="flex items-center space-x-4">
+          <Select
+            value={timeframe}
+            onValueChange={(v) => setTimeframe(v as 'monthly' | 'quarterly')}
+          >
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="เลือกมุมมอง" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="monthly">รายเดือน</SelectItem>
+              <SelectItem value="quarterly">รายไตรมาส</SelectItem>
+            </SelectContent>
+          </Select>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {isLoading ? (
-          <>
-            <Skeleton className="h-32" />
-            <Skeleton className="h-32" />
-            <Skeleton className="h-32" />
-            <Skeleton className="h-32" />
-          </>
-        ) : (
-          <>
-            <KPICard
-              title="รายได้รวม"
-              value={data?.summary.revenue.actual || 0}
-              plan={data?.summary.revenue.plan || 0}
-              type="revenue"
-            />
-            <KPICard
-              title="รายจ่ายรวม"
-              value={data?.summary.expense.actual || 0}
-              plan={data?.summary.expense.plan || 0}
-              type="expense"
-            />
-            <KPICard
-              title="กำไร/ขาดทุน"
-              value={(data?.summary.revenue.actual || 0) - (data?.summary.expense.actual || 0)}
-              plan={(data?.summary.revenue.plan || 0) - (data?.summary.expense.plan || 0)}
-              type="revenue"
-            />
-            <KPICard
-              title="อัตราการใช้จ่าย"
-              value={data?.summary.expense.actual || 0}
-              plan={data?.summary.revenue.actual || 0}
-              type="expense"
-              format="number"
-            />
-          </>
-        )}
+          <Select
+            value={String(fiscalYear)}
+            onValueChange={handleYearChange}
+          >
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="เลือกปีงบประมาณ" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((year) => (
+                <SelectItem key={year} value={String(year)}>
+                  ปีงบ {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      {/* Charts */}
-      <Tabs defaultValue="overview" className="space-y-6">
+      {/* --- Main Content Area (Tabs) --- */}
+      <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="overview">ภาพรวม</TabsTrigger>
-          <TabsTrigger value="trends">เทรนด์</TabsTrigger>
-          <TabsTrigger value="breakdown">แบ่งตามหมวดหมู่</TabsTrigger>
+          <TabsTrigger value="overview">ภาพรวม (L1)</TabsTrigger>
+          <TabsTrigger value="expense_drilldown">
+            เจาะลึกรายจ่าย (L2-L4)
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>เทรนด์รายได้-รายจ่าย</CardTitle>
-                <CardDescription>
-                  แสดงการเปลี่ยนแปลงรายได้และรายจ่ายตลอดปีงบประมาณ
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <Skeleton className="h-80" />
-                ) : (
-                  <MonthlyTrendChart data={data?.monthlyTrend || []} />
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>สรุปตามหมวดหมู่</CardTitle>
-                <CardDescription>
-                  แสดงสัดส่วนรายได้และรายจ่ายแบ่งตามหมวดหมู่
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <Skeleton className="h-80" />
-                ) : (
-                  <CategoryBreakdownChart data={data?.categoryBreakdown || []} />
-                )}
-              </CardContent>
-            </Card>
+        {/* --- Loading State --- */}
+        {(isLoading || isRefetching) && (
+          <div className="space-y-4 mt-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Skeleton className="h-[120px]" />
+              <Skeleton className="h-[120px]" />
+              <Skeleton className="h-[120px]" />
+              <Skeleton className="h-[120px]" />
+            </div>
+            <Skeleton className="h-[400px]" />
           </div>
-        </TabsContent>
+        )}
 
-        <TabsContent value="trends">
-          <Card>
-            <CardHeader>
-              <CardTitle>วิเคราะห์เทรนด์</CardTitle>
-              <CardDescription>
-                การวิเคราะห์เชิงลึกของเทรนด์ทางการเงิน
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* Add more detailed trend analysis here */}
-              <div className="text-center text-muted-foreground py-12">
-                กำลังพัฒนาระบบวิเคราะห์เทรนด์เชิงลึก
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {/* --- Error State --- */}
+        {error && !isLoading && (
+          <div className="flex flex-col items-center justify-center text-center p-8 border rounded-lg bg-red-50 text-red-700">
+            <AlertCircle className="w-12 h-12 mb-4" />
+            <h3 className="text-xl font-semibold mb-2">
+              เกิดข้อผิดพลาดในการโหลดข้อมูล
+            </h3>
+            <p className="text-sm">{error.message}</p>
+          </div>
+        )}
 
-        <TabsContent value="breakdown">
-          <Card>
-            <CardHeader>
-              <CardTitle>รายละเอียดตามหมวดหมู่</CardTitle>
-              <CardDescription>
-                ข้อมูลเชิงลึกของแต่ละหมวดหมู่
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* Add detailed category breakdown here */}
-              <div className="text-center text-muted-foreground py-12">
-                กำลังพัฒนาระบบแสดงรายละเอียดตามหมวดหมู่
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {/* --- Success State (Data Loaded) --- */}
+        {data && !isLoading && !isRefetching && (
+          <>
+            {/* --- Tab 1: Overview --- */}
+            <TabsContent value="overview" className="space-y-4">
+              <FinancialOverview summary={data.summary} />
+              <RevenueExpenseChart
+                data={data.revenueData}
+                timeframe={timeframe}
+              />
+            </TabsContent>
+
+            {/* --- Tab 2: Expense Drilldown --- */}
+            <TabsContent value="expense_drilldown" className="space-y-4">
+              <ExpenseDrilldown
+                fiscalYear={fiscalYear}
+                timeframe={timeframe}
+              />
+            </TabsContent>
+          </>
+        )}
       </Tabs>
     </div>
   );

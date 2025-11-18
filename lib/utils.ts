@@ -1,5 +1,3 @@
-// lib/utils.ts
-
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -15,6 +13,10 @@ export function cn(...inputs: ClassValue[]) {
 export function formatCurrency(amount: number | string): string {
   const numericAmount =
     typeof amount === "string" ? parseFloat(amount) : amount;
+
+  if (isNaN(numericAmount)) {
+    return "฿0.00";
+  }
 
   return new Intl.NumberFormat("th-TH", {
     style: "currency",
@@ -43,3 +45,35 @@ export const THAI_FY_MONTHS = [
   "ส.ค.", // 8
   "ก.ย.", // 9
 ];
+
+/**
+ * Calculates the Thai fiscal year and month from a Date object.
+ * Thai FY starts in October (month 9).
+ * @param date The input Date object
+ * @returns { fiscalYear: number, month: number }
+ */
+export const getFiscalYearAndMonth = (date: Date) => {
+  const month = date.getMonth(); // 0-11 (Jan=0, Dec=11)
+  const year = date.getFullYear();
+
+  // Fiscal month is 1-12
+  const fiscalMonth = month + 1;
+
+  // October (9) is the start of the new fiscal year (e.g., Oct 2023 is FY 2024)
+  // Thai year (BE) = AD + 543
+  const fiscalYear = month >= 9 ? year + 543 + 1 : year + 543;
+
+  return { fiscalYear: fiscalYear, month: fiscalMonth };
+};
+
+export function getCurrentFiscalYear() {
+  const now = new Date();
+  const month = now.getMonth(); // 0-11
+  const year = now.getFullYear() + 543; // Buddhist Era
+
+  // If month is October (9), November (10), or December (11)
+  if (month >= 9) {
+    return year + 1;
+  }
+  return year;
+}
