@@ -1,9 +1,6 @@
-import { Decimal } from "@prisma/client/runtime/library";
-
-// Unified Timeframe Enum
-export type TimeFrame = "monthly" | "quarterly" | "annual";
-
-// KPIData Interface
+// lib/types/dashboard.ts
+export type StatusType = "success" | "warning" | "danger";
+export type DrillLevel = "L1" | "L2" | "L3" | "L4" | "L5";
 export interface KpiMetric {
   label: string;
   amount: number;
@@ -11,22 +8,58 @@ export interface KpiMetric {
   variance: number;
   variancePercent: number;
   trend: "up" | "down" | "neutral";
-  status: "success" | "warning" | "danger"; // Semantic colors
+  status: StatusType;
 }
 
-// L1 Executive Summary
-export interface DashboardSummary {
-  fiscalYear: number;
-  totalRevenue: KpiMetric;
-  totalExpense: KpiMetric;
-  netResult: KpiMetric;
-  lastUpdated: Date;
-}
-
-// Chart Data Structure
 export interface ChartDataPoint {
-  name: string; // Month or Quarter name
+  name: string; // "Jan", "Feb" etc.
   revenue: number;
   expense: number;
-  target?: number;
+  planRevenue: number;
+  planExpense: number;
+}
+
+export interface CategoryDataPoint {
+  name: string;
+  value: number;
+  color: string;
+}
+
+export interface DashboardSummary {
+  fiscalYear: number;
+  lastUpdated: Date;
+  kpis: {
+    totalRevenue: KpiMetric;
+    totalExpense: KpiMetric;
+    netResult: KpiMetric;
+  };
+  charts: {
+    monthlyTrend: ChartDataPoint[];
+    expenseBreakdown: CategoryDataPoint[];
+    revenueBreakdown: CategoryDataPoint[];
+  };
+}
+
+export interface DrillDownRow {
+  id: string;
+  name: string;
+  code?: string;
+  level: DrillLevel;
+  hasChildren: boolean;
+
+  // Financials
+  financials: {
+    // อดีต
+    lastYearActual: number;
+
+    // ปัจจุบัน
+    currentPlan: number;
+    currentActual: number;
+    variance: number;
+    variancePercent: number;
+    status: StatusType;
+
+    // อนาคต
+    nextYearPlan: number;
+  };
 }

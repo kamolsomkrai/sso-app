@@ -1,84 +1,56 @@
-// components/dashboard/category-breakdown-chart.tsx
-'use client';
+"use client";
 
-import { Doughnut } from 'react-chartjs-2';
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
-
-ChartJS.register(ArcElement, Tooltip, Legend);
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CategoryDataPoint } from "@/lib/types/dashboard";
+import { formatCurrency } from "@/lib/utils";
 
 interface CategoryBreakdownChartProps {
-  data: Array<{
-    category: string;
-    amount: number;
-    type: 'revenue' | 'expense';
-  }>;
+  data: CategoryDataPoint[];
 }
 
 export function CategoryBreakdownChart({ data }: CategoryBreakdownChartProps) {
-  const revenueData = data.filter(d => d.type === 'revenue');
-  const expenseData = data.filter(d => d.type === 'expense');
-
-  const revenueChartData = {
-    labels: revenueData.map(d => d.category),
-    datasets: [
-      {
-        data: revenueData.map(d => d.amount),
-        backgroundColor: [
-          '#10b981',
-          '#34d399',
-          '#6ee7b7',
-          '#a7f3d0',
-          '#d1fae5',
-        ],
-        borderWidth: 2,
-        borderColor: '#ffffff',
-      },
-    ],
-  };
-
-  const expenseChartData = {
-    labels: expenseData.map(d => d.category),
-    datasets: [
-      {
-        data: expenseData.map(d => d.amount),
-        backgroundColor: [
-          '#ef4444',
-          '#f87171',
-          '#fca5a5',
-          '#fecaca',
-          '#fee2e2',
-        ],
-        borderWidth: 2,
-        borderColor: '#ffffff',
-      },
-    ],
-  };
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'bottom' as const,
-      },
-    },
-    cutout: '60%',
-  };
+  // Fallback colors if not provided
+  const COLORS = ['#0ea5e9', '#22c55e', '#eab308', '#f97316', '#ef4444'];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-center">รายได้แบ่งตามหมวดหมู่</h3>
-        <div className="h-64">
-          <Doughnut data={revenueChartData} options={chartOptions} />
+    <Card className="col-span-4 lg:col-span-2 border-none shadow-sm">
+      <CardHeader>
+        <CardTitle className="text-lg font-semibold text-slate-800">
+          Top Expenses Breakdown
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[300px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={80}
+                paddingAngle={5}
+                dataKey="value"
+              >
+                {data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(value: number) => formatCurrency(value)}
+                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+              />
+              <Legend
+                layout="horizontal"
+                verticalAlign="bottom"
+                align="center"
+                wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
         </div>
-      </div>
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-center">รายจ่ายแบ่งตามหมวดหมู่</h3>
-        <div className="h-64">
-          <Doughnut data={expenseChartData} options={chartOptions} />
-        </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

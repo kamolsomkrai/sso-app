@@ -1,9 +1,9 @@
 import { PrismaClient, CategoryType } from "@prisma/client";
 import { DashboardSummary, KpiMetric, StatusType } from "@/lib/types/dashboard";
 
-// Use a singleton pattern in production to prevent connection exhaustion
 const prisma = new PrismaClient();
 
+// ... (Keep calculateMetric function from previous turn) ...
 function calculateMetric(
   actual: number,
   plan: number,
@@ -17,13 +17,10 @@ function calculateMetric(
   let trend: "up" | "down" | "neutral" = variance >= 0 ? "up" : "down";
 
   if (type === "EXPENSE") {
-    // Expense: Lower than plan is Good (Green), Higher is Bad (Red)
     if (variancePercent > 5) status = "danger";
     else if (variancePercent > 0) status = "warning";
     else status = "success";
-    // Trend: Up is bad for expense generally, but here we track magnitude
   } else {
-    // Revenue/Net: Higher is Good
     if (variancePercent < -5) status = "danger";
     else if (variancePercent < 0) status = "warning";
     else status = "success";
@@ -43,67 +40,112 @@ function calculateMetric(
 export const getExecutiveSummary = async (
   fiscalYear: number
 ): Promise<DashboardSummary> => {
-  // Fetch all aggregates in parallel for performance
+  // 1. Fetch KPIs (Aggregates)
   const [planRev, planExp, actualRev, actualExp] = await Promise.all([
-    // 1. Plan Revenue
     prisma.planFinancialData.aggregate({
       _sum: { planAmount: true },
-      where: {
-        fiscalYear,
-        category: { categoryType: CategoryType.REVENUE },
-      },
+      where: { fiscalYear, category: { categoryType: CategoryType.REVENUE } },
     }),
-    // 2. Plan Expense
     prisma.planFinancialData.aggregate({
       _sum: { planAmount: true },
-      where: {
-        fiscalYear,
-        category: { categoryType: CategoryType.EXPENSE },
-      },
+      where: { fiscalYear, category: { categoryType: CategoryType.EXPENSE } },
     }),
-    // 3. Actual Revenue
     prisma.monthlyActualEntry.aggregate({
       _sum: { amount: true },
-      where: {
-        fiscalYear,
-        category: { categoryType: CategoryType.REVENUE },
-      },
+      where: { fiscalYear, category: { categoryType: CategoryType.REVENUE } },
     }),
-    // 4. Actual Expense
     prisma.monthlyActualEntry.aggregate({
       _sum: { amount: true },
-      where: {
-        fiscalYear,
-        category: { categoryType: CategoryType.EXPENSE },
-      },
+      where: { fiscalYear, category: { categoryType: CategoryType.EXPENSE } },
     }),
   ]);
 
-  const planRevenue = Number(planRev._sum.planAmount || 0);
-  const planExpense = Number(planExp._sum.planAmount || 0);
-  const actualRevenue = Number(actualRev._sum.amount || 0);
-  const actualExpense = Number(actualExp._sum.amount || 0);
+  // 2. Fetch Monthly Trend Data
+  const monthlyEntries = await prisma.monthlyActualEntry.groupBy({
+    by: ["month", "categoryId"],
+    _sum: { amount: true },
+    where: { fiscalYear },
+  });
+
+  // Get Category Types map for fast lookup
+  const categories = await prisma.budgetCategory.findMany({
+    select: { id: true, categoryType: true, categoryName: true },
+  });
+  const catTypeMap = new Map(categories.map((c) => [c.id, c.categoryType]));
+  const catNameMap = new Map(categories.map((c) => [c.id, c.categoryName]));
+
+  // Process Monthly Data
+  const months = Array.from({ length: 12 }, (_, i) => i + 1); // 1-12
+  // Note: Fiscal Year often starts in Oct (10). Adjust logic if needed.
+  // For simplicity, we sort 1-12.
+
+  const monthlyTrend = months.map((month) => {
+    const entries = monthlyEntries.filter((e) => e.month === month);
+    let revenue = 0;
+    let expense = 0;
+
+    entries.forEach((e) => {
+      const type = catTypeMap.get(e.categoryId);
+      const amt = Number(e._sum.amount || 0);
+      if (type === CategoryType.REVENUE) revenue += amt;
+      else if (type === CategoryType.EXPENSE) expense += amt;
+    });
+
+    return {
+      name: new Date(0, month - 1).toLocaleString("en-US", { month: "short" }),
+      revenue,
+      expense,
+      planRevenue: Number(planRev._sum.planAmount || 0) / 12, // Simple average for plan
+      planExpense: Number(planExp._sum.planAmount || 0) / 12,
+    };
+  });
+
+  // 3. Fetch Category Breakdown (Top 5 Expenses)
+  const expenseBreakdownRaw = await prisma.monthlyActualEntry.groupBy({
+    by: ["categoryId"],
+    _sum: { amount: true },
+    where: {
+      fiscalYear,
+      category: { categoryType: CategoryType.EXPENSE, level: 2 }, // L2 Categories
+    },
+    orderBy: { _sum: { amount: "desc" } },
+    take: 5,
+  });
+
+  const expenseBreakdown = expenseBreakdownRaw.map((item, index) => ({
+    name: catNameMap.get(item.categoryId) || "Unknown",
+    value: Number(item._sum.amount || 0),
+    color: `hsl(var(--chart-${index + 1}))`, // Use CSS variables
+  }));
 
   return {
     fiscalYear,
     lastUpdated: new Date(),
-    totalRevenue: calculateMetric(
-      actualRevenue,
-      planRevenue,
-      "Total Revenue",
-      "REVENUE"
-    ),
-    totalExpense: calculateMetric(
-      actualExpense,
-      planExpense,
-      "Total Expense",
-      "EXPENSE"
-    ),
-    netResult: calculateMetric(
-      actualRevenue - actualExpense,
-      planRevenue - planExpense,
-      "Net Result",
-      "NET"
-    ),
+    kpis: {
+      totalRevenue: calculateMetric(
+        Number(actualRev._sum.amount || 0),
+        Number(planRev._sum.planAmount || 0),
+        "Total Revenue",
+        "REVENUE"
+      ),
+      totalExpense: calculateMetric(
+        Number(actualExp._sum.amount || 0),
+        Number(planExp._sum.planAmount || 0),
+        "Total Expense",
+        "EXPENSE"
+      ),
+      netResult: calculateMetric(
+        Number(actualRev._sum.amount || 0) - Number(actualExp._sum.amount || 0),
+        Number(planRev._sum.planAmount || 0) -
+          Number(planExp._sum.planAmount || 0),
+        "Net Result",
+        "NET"
+      ),
+    },
+    charts: {
+      monthlyTrend,
+      expenseBreakdown,
+      revenueBreakdown: [], // Implement similarly if needed
+    },
   };
 };

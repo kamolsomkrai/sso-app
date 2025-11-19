@@ -1,102 +1,92 @@
-// app/(app)/layout.tsx
-'use client';
+import React from "react";
+import Link from "next/link";
+import {
+  LayoutDashboard,
+  PieChart,
+  Wallet,
+  Settings,
+  LogOut,
+  Menu
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
-import { useAuth } from '@/components/auth-provider';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { LogOut, UserCircle, LayoutGrid, FilePlus } from 'lucide-react';
-import Link from 'next/link';
-import { Skeleton } from '@/components/ui/skeleton';
-
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const { user, signOut, isLoading } = useAuth();
-  const router = useRouter();
-
-  // ตรวจสอบสิทธิ์
-  useEffect(() => {
-    if (!isLoading && !user) {
-      router.push('/');
-    }
-  }, [user, isLoading, router]);
-
-  // --- สถานะกำลังโหลด ---
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="p-8 bg-white rounded-lg shadow-md text-center">
-          <p className="mb-4">กำลังโหลดข้อมูลผู้ใช้...</p>
-          <Skeleton className="h-10 w-40 mx-auto" />
-        </div>
-      </div>
-    );
-  }
-
-  // --- ตรวจสอบว่าผู้ใช้ล็อกอินหรือไม่ ---
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="p-8 bg-white rounded-lg shadow-md text-center">
-          <p className="mb-4">กรุณาเข้าสู่ระบบก่อน</p>
-          <Button onClick={() => router.push('/')}>
-            ไปหน้าล็อกอิน
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // --- แสดงผลเมื่อล็อกอินแล้ว ---
+// Sidebar Component
+function Sidebar() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <h1 className="text-xl font-bold text-gray-800">
-            SSO Expense Insight
-          </h1>
-          <div className="flex items-center space-x-4">
-
-            {/* User Info */}
-            <div className="text-right hidden sm:block">
-              <p className="font-semibold text-sm">{user.name}</p>
-              <p className="text-xs text-gray-500">
-                {user.organizationPosition} • {user.role}
-                {user.organizationHnameTh && ` • ${user.organizationHnameTh}`}
-              </p>
-            </div>
-            <UserCircle className="h-8 w-8 text-gray-400" />
-
-            {/* --- Navigation Links --- */}
-            <Link href="/dashboard" passHref>
-              <Button variant="outline" size="sm">
-                <LayoutGrid className="h-4 w-4 mr-2" />
-                Dashboard
-              </Button>
-            </Link>
-
-            <Link href="/data-entry" passHref>
-              <Button variant="ghost" size="sm">
-                <FilePlus className="h-4 w-4 mr-2" />
-                บันทึกข้อมูล
-              </Button>
-            </Link>
-
-            {/* Logout Button */}
-            <Button variant="outline" size="sm" onClick={signOut}>
-              <LogOut className="h-4 w-4 mr-2" />
-              ออกจากระบบ
-            </Button>
+    <div className="flex h-full flex-col border-r bg-slate-900 text-slate-50 w-64">
+      <div className="p-6">
+        <div className="flex items-center gap-2 font-bold text-xl tracking-tight">
+          <div className="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center text-white">
+            <Wallet className="w-5 h-5" />
           </div>
+          FinSight
         </div>
-      </header>
+        <p className="text-xs text-slate-400 mt-1">Hospital Finance System</p>
+      </div>
 
-      {/* Main Content Area */}
-      <main className="container mx-auto p-4 md:p-6">{children}</main>
+      <div className="flex-1 px-4 space-y-2">
+        <nav className="space-y-1">
+          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-2">Analytics</h4>
+          <Link href="/dashboard" className="flex items-center gap-3 px-3 py-2 rounded-lg bg-brand-600/10 text-brand-400 font-medium border border-brand-600/20">
+            <LayoutDashboard className="w-5 h-5" />
+            Overview
+          </Link>
+          <Link href="/dashboard/budget" className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors">
+            <PieChart className="w-5 h-5" />
+            Budget Plan
+          </Link>
+        </nav>
+
+        <nav className="space-y-1 mt-6">
+          <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-2">Operations</h4>
+          <Link href="/data-entry" className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors">
+            <Wallet className="w-5 h-5" />
+            Data Entry
+          </Link>
+        </nav>
+      </div>
+
+      <div className="p-4 border-t border-slate-800">
+        <Link href="/settings" className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors">
+          <Settings className="w-5 h-5" />
+          Settings
+        </Link>
+        <button className="w-full mt-2 flex items-center gap-3 px-3 py-2 rounded-lg text-red-400 hover:bg-red-950/30 transition-colors">
+          <LogOut className="w-5 h-5" />
+          Sign Out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-screen bg-slate-50">
+      {/* Desktop Sidebar */}
+      <div className="hidden md:block fixed inset-y-0 z-50">
+        <Sidebar />
+      </div>
+
+      {/* Mobile Sidebar */}
+      <div className="md:hidden fixed top-4 left-4 z-50">
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="icon" className="bg-white shadow-md">
+              <Menu className="w-5 h-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0 w-64 border-r-0 bg-slate-900">
+            <Sidebar />
+          </SheetContent>
+        </Sheet>
+      </div>
+
+      {/* Main Content */}
+      <main className="flex-1 md:pl-64 transition-all duration-300">
+        {children}
+      </main>
     </div>
   );
 }
