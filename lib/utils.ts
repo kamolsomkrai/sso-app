@@ -10,19 +10,22 @@ export function cn(...inputs: ClassValue[]) {
  * @param amount The number or string to format.
  * @returns A string formatted as currency (e.g., "฿1,250.00").
  */
-export function formatCurrency(amount: number | string): string {
-  const numericAmount =
-    typeof amount === "string" ? parseFloat(amount) : amount;
-
-  if (isNaN(numericAmount)) {
-    return "฿0.00";
-  }
+export function formatCurrency(amount: number | undefined | null): string {
+  if (amount === undefined || amount === null) return "฿0.00";
 
   return new Intl.NumberFormat("th-TH", {
     style: "currency",
     currency: "THB",
     minimumFractionDigits: 2,
-  }).format(numericAmount);
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+export function formatCompactNumber(number: number): string {
+  return new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    compactDisplay: "short",
+  }).format(number);
 }
 
 export function formatNumber(number: number): string {
