@@ -298,8 +298,198 @@ model Document {
 
   // Indexes
   @@index([procurementItemId])
-  @@index([monthlyEntryId])
+  @@ index([monthlyEntryId])
   @@index([uploadedById])
   @@index([createdAt])
   @@map("documents")
+}
+
+// ============================================
+// KPI SYSTEM MODELS
+// ============================================
+
+enum KpiCalcLogic {
+  GTE  // Greater Than or Equal
+  LTE  // Less Than or Equal
+  EQ0  // Equal to Zero
+  EQT  // Equal to Target (text comparison)
+}
+
+enum KpiStatus {
+  PASSED    // ผ่าน
+  FAILED    // ไม่ผ่าน
+  PENDING   // รอข้อมูล
+  ERROR     // ข้อมูลผิดพลาด
+}
+
+model KpiIndicator {
+  id   String @id @default(cuid())
+  code String @unique @db.VarChar(10)
+  name String
+
+  // Relations
+  kpis KpiMaster[]
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("kpi_indicators")
+}
+
+model KpiStrategy {
+  id   String @id @default(cuid())
+  code String @unique @db.VarChar(10)
+  name String @db.Text
+
+  // Relations
+  objectives   KpiObjective[]
+  plans        KpiPlan[]
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([code])
+  @@map("kpi_strategies")
+}
+
+model KpiPlan {
+  id   String @id @default(cuid())
+  code String @unique @db.VarChar(10)
+  name String @db.Text
+
+  // Relations
+  strategyId String       @map("strategy_id")
+  strategy   KpiStrategy  @relation(fields: [strategyId], references: [id])
+
+  objectives KpiObjective[]
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([strategyId])
+  @@map("kpi_plans")
+}
+
+model KpiObjective {
+  id   String @id @default(cuid())
+  code String @unique @db.VarChar(10)
+  name String @db.Text
+
+  // Relations
+  strategyId String?      @map("strategy_id")
+  strategy   KpiStrategy? @relation(fields: [strategyId], references: [id])
+
+  planId String?  @map("plan_id")
+  plan   KpiPlan? @relation(fields: [planId], references: [id])
+
+  kpis KpiMaster[]
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([strategyId])
+  @@index([planId])
+  @@map("kpi_objectives")
+}
+
+model KpiMaster {
+  id String @id @default(cuid())
+
+  // KPI Identification
+  code String @unique @db.VarChar(20)
+  name String @db.Text
+
+  // Target Information
+  targetText          String?      @map("target_text") @db.Text
+  fiveYearTargetText  String?      @map("five_year_target_text") @db.Text
+  fiveYearTargetValue Decimal?     @map("five_year_target_value") @db.Decimal(10, 2)
+  fiveYearPlanPeriod  String?      @map("five_year_plan_period") @db.VarChar(20)
+  
+  // Calculation Logic
+  calcLogic KpiCalcLogic @default(GTE) @map("calc_logic")
+
+  // Ownership
+  owner String? @db.VarChar(100)
+
+  // Status
+  isActive         Boolean  @default(true) @map("is_active")
+  cumulativeValue  Decimal? @map("cumulative_value") @db.Decimal(10, 2)
+
+  // Relations
+  objectiveId String        @map("objective_id")
+  objective   KpiObjective  @relation(fields: [objectiveId], references: [id])
+
+  indicatorId String        @map("indicator_id")
+  indicator   KpiIndicator  @relation(fields: [indicatorId], references: [id])
+
+  quarterlyData KpiQuarterlyData[]
+  annualData    KpiAnnualData[]
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Indexes
+  @@index([code])
+  @@index([objectiveId])
+  @@index([indicatorId])
+  @@index([isActive])
+  @@map("kpi_master")
+}
+
+model KpiQuarterlyData {
+  id String @id @default(cuid())
+
+  // Period Information
+  year    Int
+  quarter Int @db.SmallInt // 1-4
+
+  // Target and Result
+  quarterlyTarget String? @map("quarterly_target") @db.Text
+  result          String? @db.Text
+  status          KpiStatus @default(PENDING)
+
+  // Relations
+  kpiId String    @map("kpi_id")
+  kpi   KpiMaster @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Unique constraint
+  @@unique([kpiId, year, quarter])
+  @@index([kpiId])
+  @@index([year])
+  @@index([status])
+  @@map("kpi_quarterly_data")
+}
+
+model KpiAnnualData {
+  id String @id @default(cuid())
+
+  // Period Information
+  year Int
+
+  // Target and Result
+  yearTarget Decimal? @map("year_target") @db.Decimal(10, 2)
+  yearResult Decimal? @map("year_result") @db.Decimal(10, 2)
+
+  // Relations
+  kpiId String    @map("kpi_id")
+  kpi   KpiMaster @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Unique constraint
+  @@unique([kpiId, year])
+  @@index([kpiId])
+  @@index([year])
+  @@map("kpi_annual_data")
 }

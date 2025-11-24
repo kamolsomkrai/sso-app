@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <base target="_top" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+      rel="stylesheet"
+    />
+    <title>KPI Dashboard โรงพยาบาลลอง</title>
+    <style>
+              :root {
+                  --sidebar-width: 280px; --header-height: 70px; --bg-color: #f7f9fc;
+                  --card-bg: #ffffff; --text-primary: #1a202c; --text-secondary: #5a677d;
+                  --border-color: #e2e8f0; --primary-color: #4A90E2; --primary-hover: #357ABD;
+                  --primary-light: #EBF3FC; --green: #34D399; --red: #F87171; --orange: #FBBF24; --grey: #A0AEC0;
+                  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+                  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                  --border-radius: 12px;
+              }
+              *, *::before, *::after { box-sizing: border-box; }
+              @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+              @keyframes spin { to { transform: rotate(360deg); } }
+              body { font-family: 'Sarabun', sans-serif; background-color: var(--bg-color); color: var(--text-primary); margin: 0; display: flex; /* Ensure body is flex container */ height: 100vh; overflow: hidden; -webkit-font-smoothing: antialiased; }
+
+              #app-loader { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; width: 100vw; background-color: var(--card-bg); transition: opacity 0.3s ease-out; position: fixed; top: 0; left: 0; z-index: 2000; }
+              #app-loader .spinner { width: 48px; height: 48px; border: 4px solid var(--primary-light); border-top-color: var(--primary-color); border-radius: 50%; animation: spin 1s linear infinite; }
+              #app-loader p { margin-top: 1.5rem; font-weight: 500; color: var(--text-secondary); }
+              #app-container { display: flex; width: 100%; /* Ensure container takes full width */ height: 100vh; opacity: 0; animation: fadeIn 0.5s ease-in forwards; }
+              .hidden { display: none !important; }
+
+              .sidebar { width: var(--sidebar-width); height: 100vh; background-color: var(--card-bg); border-right: 1px solid var(--border-color); padding: 1.5rem; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; z-index: 1000; flex-shrink: 0; }
+              .sidebar-header { display: flex; align-items: center; gap: 0.75rem; padding-bottom: 1.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
+              .sidebar-header .logo { background: linear-gradient(135deg, var(--primary-color), var(--primary-hover)); color: white; min-width: 40px; height: 40px; border-radius: 8px; display: grid; place-items: center; font-size: 24px; }
+              .sidebar-header .sidebar-title-group { line-height: 1.3; }
+              .sidebar-header .sidebar-title-group p { font-size: 0.9rem; color: var(--text-secondary); font-weight: 500; margin: 0; }
+              .sidebar-header h2 { font-size: 1.25rem; margin: 0; font-weight: 600; }
+              .sidebar-nav { flex-grow: 1; overflow-y: auto; }
+              .sidebar-nav::-webkit-scrollbar { width: 4px; }
+              .sidebar-nav::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px;}
+              .nav-section-title { font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; padding: 0 0.5rem; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+              .filter-group { padding: 0 0.5rem; margin-bottom: 1rem; }
+              .filter-group select { width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; font-family: 'Sarabun', sans-serif; font-size: 0.95rem; background-color: var(--bg-color); appearance: none; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em; cursor: pointer; }
+              .button-group { display: flex; gap: 0.5rem; }
+              .button-group button { flex-grow: 1; padding: 0.6rem; border: 1px solid var(--border-color); background-color: var(--card-bg); color: var(--text-secondary); border-radius: 8px; cursor: pointer; font-weight: 500; transition: all 0.2s ease; font-family: 'Sarabun', sans-serif; font-size: 0.9rem; }
+              .button-group button:hover { background-color: var(--primary-light); color: var(--primary-color); }
+              .button-group button.active { background-color: var(--primary-color); color: white; border-color: var(--primary-color); box-shadow: var(--shadow-sm); }
+              #nav-links-container ul { list-style: none; padding: 0; margin: 0; }
+              #nav-links-container a { display: flex; align-items: center; gap: 0.85rem; padding: 0.75rem 0.5rem; margin-bottom: 0.25rem; border-radius: 8px; text-decoration: none; color: var(--text-secondary); font-weight: 500; transition: all 0.2s ease; }
+              #nav-links-container a .material-icons { font-size: 20px; }
+              #nav-links-container a:hover { background-color: var(--primary-light); color: var(--primary-color); }
+              #nav-links-container a.active { background-color: var(--primary-color); color: white; box-shadow: var(--shadow-sm); }
+
+              .main-container {
+                  flex-grow: 1; /* Allow container to grow and fill space */
+                  height: 100vh;
+                  margin-left: var(--sidebar-width); /* Push content right of the fixed sidebar */
+                  display: flex;
+                  flex-direction: column;
+                  /* Remove fixed width */
+              }
+              .main-header { height: var(--header-height); background-color: var(--card-bg); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 2rem; flex-shrink: 0; }
+              .main-header h1 { font-size: 1.75rem; font-weight: 700; margin: 0; }
+              .main-header p { color: var(--text-secondary); margin: 0; font-weight: 500; }
+              .main-content { flex-grow: 1; overflow-y: auto; padding: 2rem; }
+              .main-content::-webkit-scrollbar { width: 6px; }
+              .main-content::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 6px;}
+              .content-area { animation: fadeIn 0.5s ease-out forwards; }
+
+              /* --- Component Styles --- */
+              .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-bottom: 2.5rem; }
+              .summary-card { display: flex; align-items: center; background-color: var(--card-bg); padding: 1.5rem; border-radius: var(--border-radius); box-shadow: var(--shadow-md); }
+              .card-icon { display: grid; place-items: center; min-width: 44px; height: 44px; border-radius: 50%; margin-right: 1rem; font-size: 24px; }
+              .card-info h3 { font-size: 0.9rem; font-weight: 500; color: var(--text-secondary); margin: 0 0 0.25rem 0; }
+              .card-info .value { font-size: 1.75rem; font-weight: 700; }
+              .strategy-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem; }
+              .strategy-summary-card { background-color: var(--card-bg); padding: 1.5rem; border-radius: var(--border-radius); box-shadow: var(--shadow-md); border-top: 4px solid var(--primary-color); }
+              .strategy-summary-card h3 { margin: 0 0 1.5rem 0; font-size: 1.1rem; font-weight: 600;}
+              .strategy-chart-container { display: flex; align-items: center; gap: 1.5rem; }
+              .strategy-chart { position: relative; width: 100px; height: 100px; flex-shrink: 0;}
+              .strategy-stats { flex-grow: 1; }
+              .stat-item { display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; padding: 0.6rem 0; border-bottom: 1px solid var(--border-color); }
+              .stat-item:last-child { border-bottom: none; }
+              .stat-item .value { font-weight: 700; font-size: 1.1rem; }
+              .stat-item .value.green { color: var(--green); } .stat-item .value.red { color: var(--red); }
+              .strategy-group-card { /* **NEW** For 5-year view grouping */
+                   background-color: transparent; /* Make it invisible, just for grouping */
+                   border: none;
+                   box-shadow: none;
+                   padding: 0;
+                   margin-bottom: 2rem;
+              }
+              .strategy-group-header { /* **NEW** */
+                  font-size: 1.4rem;
+                  font-weight: 600;
+                  margin-bottom: 1.5rem;
+                  padding-bottom: 0.75rem;
+                  border-bottom: 2px solid var(--primary-color);
+                  display: flex;
+                  align-items: center;
+                  gap: 0.75rem;
+              }
+              .strategy-group-header .material-icons { color: var(--primary-color); }
+
+              .objective-card, .plan-card { background-color: var(--card-bg); border-radius: var(--border-radius); margin-bottom: 2rem; box-shadow: var(--shadow-md); border: 1px solid var(--border-color); overflow: hidden; }
+              .objective-header, .plan-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); background-color: #fcfdff; display: flex; align-items: center; gap: 0.75rem; }
+              .objective-header .material-icons, .plan-header .material-icons { color: var(--primary-color); }
+              .objective-title, .plan-title { font-size: 1.2rem; font-weight: 600; }
+              .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; padding: 1.5rem; }
+              .gauge-card { background-color: var(--card-bg); border-radius: var(--border-radius); border: 1px solid var(--border-color); overflow: hidden; transition: all 0.3s ease; display: flex; flex-direction: column; position: relative;}
+              .gauge-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-md); }
+              .gauge-header { padding: 1rem; background-color: #fcfdff; cursor: pointer; text-align: center; }
+              .gauge-kpi-title { font-weight: 600; font-size: 1rem; }
+              .gauge-kpi-owner { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem; }
+              .gauge-body { padding: 1.5rem; flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;}
+              .gauge-container { position: relative; width: 100%; max-width: 180px; height: 90px; margin-bottom: 1rem; }
+              .gauge-value { position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); font-size: 2rem; font-weight: 700; }
+              .gauge-card .quarterly-content { display: none; padding: 1.5rem; border-top: 1px solid var(--border-color); background-color: var(--bg-color); }
+              .gauge-card.open .quarterly-content { display: block; }
+              .quarterly-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+              .quarter-box { background-color: var(--card-bg); border-radius: 8px; padding: 0.75rem; border: 1px solid var(--border-color); }
+              .quarter-name { font-weight: 600; font-size: 0.9rem; }
+              .quarter-details { font-size: 0.9rem; color: var(--text-secondary); margin: 0.5rem 0 0 0; text-align: left; line-height: 1.5; }
+              .quarter-details span { font-weight: 600; color: var(--text-primary); }
+              .cancelled { background-color: #f1f5f9 !important; opacity: 0.7; border-color: #94a3b8 !important; }
+              .cancelled::after { content: 'ยกเลิก'; position: absolute; top: 10px; right: 10px; background-color: var(--text-secondary); color: white; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; z-index: 10; }
+              .gauge-card.cancelled:hover { transform: translateY(0); box-shadow: none; }
+              .gauge-card.cancelled .gauge-header { cursor: default; }
+              .annual-chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; padding: 1.5rem; }
+              .annual-kpi-card { background-color: var(--card-bg); border-radius: var(--border-radius); border: 1px solid var(--border-color); padding: 1.5rem; position: relative; box-shadow: var(--shadow-sm); }
+              .annual-kpi-card.cancelled { background-color: #f1f5f9; opacity: 0.7; border-color: #94a3b8; }
+              .annual-kpi-title { font-weight: 600; font-size: 1.1rem; margin: 0 0 1rem 0; }
+              .annual-chart-container { height: 250px; }
+              .loader, .no-results { padding: 4rem; text-align: center; color: var(--text-secondary); }
+              .no-results i { font-size: 48px; margin-bottom: 1rem; color: var(--border-color); }
+
+              /* เพิ่มสไตล์สำหรับข้อมูลโรงพยาบาลลอง */
+              .hospital-info {
+                  background: linear-gradient(135deg, #4A90E2, #357ABD);
+                  color: white;
+                  padding: 1.5rem;
+                  border-radius: var(--border-radius);
+                  margin-bottom: 2rem;
+                  box-shadow: var(--shadow-md);
+                  display: flex;
+                  align-items: center;
+                  gap: 1.5rem;
+              }
+              .hospital-logo {
+                  width: 80px;
+                  height: 80px;
+                  background-color: white;
+                  border-radius: 50%;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  font-size: 2rem;
+                  color: var(--primary-color);
+                  flex-shrink: 0;
+                  overflow: hidden;
+              }
+
+              .hospital-logo img {
+                  max-width: 80%;
+                  max-height: 80%;
+                  object-fit: contain;
+              }
+
+              .hospital-details h2 {
+                  margin: 0 0 0.5rem 0;
+                  font-size: 1.5rem;
+                  font-weight: 700;
+              }
+              .hospital-details p {
+                  margin: 0;
+                  opacity: 0.9;
+                  font-size: 0.95rem;
+              }
+
+              /* ปรับปรุงสีให้สอดคล้องกับโรงพยาบาล */
+              .sidebar-header .logo {
+                  /* background: linear-gradient(135deg, #4A90E2, #357ABD); */ /* ปิดพื้นหลังสีน้ำเงิน */
+                  background: #ffffff; /* เปลี่ยนเป็นพื้นหลังสีขาว */
+                  border: 1px solid var(--border-color); /* เพิ่มเส้นขอบ */
+                  /* color: white; */ /* ไม่จำเป็นแล้ว */
+                  min-width: 40px;
+                  height: 40px;
+                  border-radius: 8px;
+                  display: grid;
+                  place-items: center;
+                  /* font-size: 24px; */ /* ไม่จำเป็นแล้ว */
+                  padding: 4px; /* เพิ่มช่องว่างภายในเล็กน้อย */
+              }
+
+              .sidebar-header .logo img {
+                  width: 100%;
+                  height: 100%;
+                  object-fit: contain;
+              }
+              .button-group button.active {
+                  background-color: #4A90E2;
+                  border-color: #4A90E2;
+              }
+              #nav-links-container a.active {
+                  background-color: #4A90E2;
+              }
+              .objective-header .material-icons, .plan-header .material-icons {
+                  color: #4A90E2;
+              }
+    </style>
+  </head>
+  <body>
+    <div id="app-loader">
+      <div class="spinner"></div>
+      <p>กำลังโหลดข้อมูล...</p>
+    </div>
+    <div id="app-container" class="hidden">
+      <nav class="sidebar">
+        <div class="sidebar-nav" id="sidebar-nav"></div>
+      </nav>
+      <main class="main-container">
+        <header class="main-header">
+          <div>
+            <h1 id="main-title"></h1>
+            <p id="main-subtitle"></p>
+          </div>
+        </header>
+        <div class="main-content">
+          <div class="hospital-info">
+            <div class="hospital-logo">
+              <img
+                src="https://i.ibb.co/6cC2xCFZ/logo-longhosp.png"
+                alt="Logo โรงพยาบาลลอง"
+              />
+              <!-- <i class="material-icons">local_hospital</i> -->
+            </div>
+            <div class="hospital-details">
+              <h2>โรงพยาบาลลอง</h2>
+              <p>จังหวัดแพร่ | Long Hospital, Phrae Province</p>
+            </div>
+          </div>
+          <div class="content-area" id="content-area"></div>
+        </div>
+      </main>
+    </div>
+    <script>
+      const CHART_COLORS = {
+        green: "#34D399",
+        red: "#F87171",
+        orange: "#FBBF24",
+        grey: "#E5E7EB",
+        primary: "#4A90E2",
+        secondary: "#A0AEC0",
+      };
+      let allData = [];
+      let activeCharts = [];
+
+      document.addEventListener("DOMContentLoaded", () => {
+        google.script.run.withSuccessHandler(onDataLoaded).getData();
+        document
+          .getElementById("content-area")
+          .addEventListener("click", (event) => {
+            const card = event.target.closest(".gauge-card");
+            if (card && !card.classList.contains("cancelled")) {
+              const header = event.target.closest(".gauge-header");
+              if (header) card.classList.toggle("open");
+            }
+          });
+      });
+
+      function onDataLoaded(data) {
+        const appLoader = document.getElementById("app-loader");
+        const appContainer = document.getElementById("app-container");
+        console.log("Data received:", data);
+        if (!data || data.length === 0) {
+          appLoader.innerHTML = formatNoResults(
+            "ไม่พบข้อมูล",
+            "กรุณาตรวจสอบการตั้งค่าและข้อมูลใน Google Sheet"
+          );
+          return;
+        }
+        allData = data;
+        populateSidebar();
+        renderView(); // Initial render after data load
+        appLoader.classList.add("hidden");
+        appContainer.classList.remove("hidden");
+      }
+
+      function populateSidebar() {
+        const sidebar = document.getElementById("sidebar-nav");
+        const uniqueIndicators = [
+          ...new Map(
+            allData.map((item) => [item.indicatorId, item.indicatorName])
+          ).entries(),
+        ];
+        const allYears = [...new Set(allData.map((item) => item.year))].sort(
+          (a, b) => b - a
+        );
+        const all5YearPeriods = [
+          ...new Set(
+            allData
+              .filter((d) => d.fiveYearPlanPeriod)
+              .map((item) => item.fiveYearPlanPeriod)
+          ),
+        ].sort((a, b) => b.localeCompare(a));
+
+        let html = `<div class="sidebar-header">
+                <div class="logo">
+                    <i class="material-icons">donut_large</i>
+                </div>
+                
+                <div class="sidebar-title-group">
+                    <h2>KPI Dashboard</h2>
+                    <p>โรงพยาบาลลอง</p>
+                </div>
+            </div>
+            <div class="nav-section-title">ระดับตัวชี้วัด</div>
+            <div class="filter-group"><div class="button-group" id="indicator-filter">${uniqueIndicators
+              .map(
+                ([id, name], i) =>
+                  `<button data-level-id="${id}" class="${
+                    i === 0 ? "active" : ""
+                  }">${name}</button>`
+              )
+              .join("")}</div></div>
+            <div id="hospital-view-controls">
+                <div class="nav-section-title">มุมมอง รพ.</div>
+                <div class="filter-group"><div class="button-group" id="view-mode-filter"><button data-view-mode="fiscal" class="active">ปีงบประมาณ</button><button data-view-mode="5year">เป้าหมาย 5 ปี</button></div></div>
+            </div>
+            <div id="fiscal-year-controls">
+                <div class="nav-section-title">ปีงบประมาณ</div>
+                <div class="filter-group"><select id="year-select">${allYears
+                  .map((y) => `<option value="${y}">${y}</option>`)
+                  .join("")}</select></div>
+            </div>
+            <div id="5-year-plan-controls" class="hidden">
+                 <div class="nav-section-title">ช่วงแผน 5 ปี</div>
+                <div class="filter-group"><select id="5-year-plan-select">${all5YearPeriods
+                  .map((p) => `<option value="${p}">${p}</option>`)
+                  .join("")}</select></div>
+            </div>
+            <div id="nav-links-container"></div>`;
+        sidebar.innerHTML = html;
+
+        document
+          .getElementById("indicator-filter")
+          .addEventListener("click", handleFilterChange);
+        document
+          .getElementById("view-mode-filter")
+          .addEventListener("click", handleFilterChange);
+        document
+          .getElementById("year-select")
+          .addEventListener("change", () => {
+            populateNavLinks(); // Update nav when year changes
+            renderView();
+          });
+        document
+          .getElementById("5-year-plan-select")
+          .addEventListener("change", renderView);
+        populateNavLinks(); // Initial population of nav links
+      }
+
+      function handleFilterChange(event) {
+        if (event.target.tagName === "BUTTON") {
+          const parent = event.target.parentElement;
+          parent
+            .querySelectorAll("button")
+            .forEach((btn) => btn.classList.remove("active"));
+          event.target.classList.add("active");
+          populateNavLinks(); // Update nav links based on new level/view
+          renderView();
+        }
+      }
+
+      function populateNavLinks() {
+        const container = document.getElementById("nav-links-container");
+        const selectedLevelId = document.querySelector(
+          "#indicator-filter button.active"
+        ).dataset.levelId;
+        const selectedYear = document.getElementById("year-select").value;
+
+        // **FIX:** Filter data for the selected year AND level before generating strategy links
+        const dataForNav = allData.filter(
+          (d) => d.indicatorId === selectedLevelId && d.year == selectedYear
+        );
+
+        const strategies = [
+          ...new Map(
+            dataForNav.map((item) => [item.strategyId, item.strategyName])
+          ).entries(),
+        ];
+
+        let navHtml = `<div class="nav-section-title">การแสดงผล</div><ul><li><a href="#" class="active" data-view="dashboard"><i class="material-icons">dashboard</i><span>ภาพรวม</span></a></li></ul>`;
+        if (strategies.length > 0) {
+          navHtml += `<div class="nav-section-title">ยุทธศาสตร์</div><ul>`;
+          strategies.forEach(
+            ([id, name]) =>
+              (navHtml += `<li><a href="#" data-view="strategy" data-strategy-id="${id}"><i class="material-icons">flag</i><span>${
+                name || "ไม่มีชื่อ"
+              }</span></a></li>`)
+          );
+          navHtml += `</ul>`;
+        }
+        container.innerHTML = navHtml;
+
+        // Re-attach listeners after rebuilding the nav
+        container.querySelectorAll("a").forEach((a) =>
+          a.addEventListener("click", (e) => {
+            e.preventDefault();
+            container
+              .querySelectorAll("a")
+              .forEach((link) => link.classList.remove("active"));
+            a.classList.add("active");
+            renderView();
+          })
+        );
+      }
+
+      function renderView() {
+        activeCharts.forEach((chart) => chart.destroy());
+        activeCharts = [];
+
+        const selectedLevelId = document.querySelector(
+          "#indicator-filter button.active"
+        ).dataset.levelId;
+        const selectedViewModeBtn = document.querySelector(
+          "#view-mode-filter button.active"
+        );
+        const selectedViewMode = selectedViewModeBtn
+          ? selectedViewModeBtn.dataset.viewMode
+          : "fiscal";
+
+        const isHospital = selectedLevelId === "IN01";
+        const is5YearView = isHospital && selectedViewMode === "5year";
+
+        // Update UI visibility based on current state
+        document
+          .getElementById("hospital-view-controls")
+          .classList.toggle("hidden", !isHospital);
+        document
+          .getElementById("fiscal-year-controls")
+          .classList.toggle("hidden", is5YearView);
+        document
+          .getElementById("5-year-plan-controls")
+          .classList.toggle("hidden", !is5YearView);
+        document
+          .getElementById("nav-links-container")
+          .classList.toggle("hidden", is5YearView);
+
+        const activeNavLink = document.querySelector(
+          "#nav-links-container a.active"
+        );
+        // **FIX:** Default to 'dashboard' if nav links were hidden (5-year view) or link not found
+        const currentNavView =
+          !is5YearView && activeNavLink
+            ? activeNavLink.dataset.view
+            : "dashboard";
+        const currentStrategyId =
+          !is5YearView && activeNavLink
+            ? activeNavLink.dataset.strategyId
+            : null;
+
+        if (is5YearView) {
+          const selectedPlanPeriod =
+            document.getElementById("5-year-plan-select").value;
+          document.getElementById(
+            "main-title"
+          ).innerText = `เป้าหมาย 5 ปี (${selectedPlanPeriod})`;
+          document.getElementById(
+            "main-subtitle"
+          ).innerText = `แผน ปี${selectedPlanPeriod} | ระดับ: โรงพยาบาลลอง`;
+          render5YearView();
+        } else {
+          const selectedYear = document.getElementById("year-select").value;
+          const dataForYear = allData.filter(
+            (d) => d.indicatorId === selectedLevelId && d.year == selectedYear
+          );
+          const levelName =
+            allData.find((d) => d.indicatorId === selectedLevelId)
+              ?.indicatorName || selectedLevelId;
+
+          if (dataForYear.length === 0) {
+            document.getElementById("main-title").innerText = `ไม่พบข้อมูล`;
+            document.getElementById(
+              "main-subtitle"
+            ).innerText = `ระดับ: ${levelName} | ปี: ${selectedYear}`;
+            document.getElementById("content-area").innerHTML = formatNoResults(
+              `ไม่พบข้อมูลสำหรับปี ${selectedYear}`,
+              `กรุณาเพิ่มข้อมูลในชีต Data_Quarterly`
+            );
+            return;
+          }
+
+          const strategyName = dataForYear.find(
+            (d) => d.strategyId === currentStrategyId
+          )?.strategyName;
+          document.getElementById("main-title").innerText =
+            currentNavView === "dashboard"
+              ? `ภาพรวมปี ${selectedYear}`
+              : `ยุทธศาสตร์ที่ ${strategyName}` || "ยุทธศาสตร์";
+          document.getElementById(
+            "main-subtitle"
+          ).innerText = `ระดับ: ${levelName} | โรงพยาบาลลอง`;
+
+          if (currentNavView === "dashboard") {
+            renderDashboardView(dataForYear);
+          } else {
+            // **FIX:** Ensure strategyData uses the correct currentStrategyId
+            renderStrategyView(
+              dataForYear.filter((d) => d.strategyId === currentStrategyId)
+            );
+          }
+        }
+      }
+
+      function renderDashboardView(data) {
+        const activeData = data.filter((d) => d.isActive !== "Cancelled");
+        const kpisInYear = [...new Set(activeData.map((d) => d.kpiId))];
+        const passedKpiOverallCount = kpisInYear.filter((kpiId) =>
+          activeData
+            .filter((d) => d.kpiId === kpiId)
+            .some((d) => d.status === "ผ่าน")
+        ).length;
+
+        let html = `<div class="summary-cards">
+                        <div class="summary-card"><div class="card-icon" style="background-color: var(--primary-light); color: var(--primary-color);"><i class="material-icons">assessment</i></div><div class="card-info"><h3>KPI ที่ใช้งาน</h3><span class="value">${
+                          kpisInYear.length
+                        }</span></div></div>
+                        <div class="summary-card"><div class="card-icon" style="background-color: #E6F8F0; color: var(--green);"><i class="material-icons">check_circle</i></div><div class="card-info"><h3>KPI ที่ผ่าน</h3><span class="value">${passedKpiOverallCount}</span></div></div>
+                        <div class="summary-card"><div class="card-icon" style="background-color: #FEEEEE; color: var(--red);"><i class="material-icons">cancel</i></div><div class="card-info"><h3>KPI ที่ยังไม่ผ่าน</h3><span class="value">${
+                          kpisInYear.length - passedKpiOverallCount
+                        }</span></div></div>
+                    </div><div><h2>ยุทธศาสตร์</h2></div><div class="strategy-summary-grid">`;
+        const strategies = groupBy(activeData, "strategyName");
+        for (const [strategyName, strategyData] of Object.entries(strategies)) {
+          const uniqueKpis = [...new Set(strategyData.map((d) => d.kpiId))];
+          if (uniqueKpis.length === 0) continue; // Skip if no active KPIs for this strategy
+          const passedCount = uniqueKpis.filter((kpiId) =>
+            strategyData
+              .filter((d) => d.kpiId === kpiId)
+              .some((d) => d.status === "ผ่าน")
+          ).length;
+          const chartId = `summary-chart-${strategyData[0].strategyId}`;
+          html += `<div class="strategy-summary-card"><h3>${strategyName}</h3><div class="strategy-chart-container"><div class="strategy-chart"><canvas id="${chartId}"></canvas></div><div class="strategy-stats"><div class="stat-item"><span>KPI ทั้งหมด</span><span class="value">${
+            uniqueKpis.length
+          }</span></div><div class="stat-item"><span>ผ่าน</span><span class="value green">${passedCount}</span></div><div class="stat-item"><span>ยังไม่ผ่าน</span><span class="value red">${
+            uniqueKpis.length - passedCount
+          }</span></div></div></div></div>`;
+        }
+        html += "</div>";
+        document.getElementById("content-area").innerHTML = html;
+
+        document
+          .querySelectorAll(".strategy-chart canvas")
+          .forEach((canvas) => {
+            const strategyId = canvas.id.replace("summary-chart-", "");
+            const strategyData = activeData.filter(
+              (d) => d.strategyId === strategyId
+            );
+            const uniqueKpis = [...new Set(strategyData.map((d) => d.kpiId))];
+            if (uniqueKpis.length > 0) {
+              // Only render chart if there are KPIs
+              const passedCount = uniqueKpis.filter((kpiId) =>
+                strategyData
+                  .filter((d) => d.kpiId === kpiId)
+                  .some((d) => d.status === "ผ่าน")
+              ).length;
+              renderSummaryDonutChart(
+                canvas.id,
+                passedCount,
+                uniqueKpis.length - passedCount
+              );
+            }
+          });
+      }
+
+      function renderStrategyView(data) {
+        if (!data || data.length === 0) {
+          document.getElementById("content-area").innerHTML = formatNoResults(
+            "ไม่พบข้อมูล",
+            "ไม่มี KPI ภายใต้ยุทธศาสตร์นี้สำหรับปีที่เลือก"
+          );
+          return;
+        }
+        let html =
+          data[0]?.indicatorId === "IN03"
+            ? createCountryHtml(data)
+            : createHospitalHtml(data);
+        document.getElementById("content-area").innerHTML =
+          html ||
+          formatNoResults("ไม่พบข้อมูล", "อาจยังไม่มี KPI ภายใต้ยุทธศาสตร์นี้");
+        document.querySelectorAll(".gauge-canvas").forEach((canvas) => {
+          const kpiData = data.filter((d) => d.kpiId === canvas.dataset.kpiId);
+          if (kpiData.length > 0) renderGaugeChart(canvas, kpiData);
+        });
+      }
+
+      function render5YearView() {
+        const selectedPlan =
+          document.getElementById("5-year-plan-select").value;
+        const hospitalData = allData.filter((d) => d.indicatorId === "IN01");
+        const uniqueKpisForPlan = [
+          ...new Map(
+            hospitalData
+              .filter((d) => d.fiveYearPlanPeriod === selectedPlan)
+              .map((item) => [item.kpiId, item])
+          ).values(),
+        ];
+
+        let html = "";
+        if (uniqueKpisForPlan.length > 0) {
+          const strategies = groupBy(uniqueKpisForPlan, "strategyName");
+          for (const [strategyName, strategyData] of Object.entries(
+            strategies
+          )) {
+            html += `<div class="strategy-group-card"> 
+                           <h2 class="strategy-group-header"><i class="material-icons">flag</i>ยุทธศาสตร์ที่ ${strategyName}</h2>`;
+            const objectives = groupBy(strategyData, "objectiveName");
+            for (const [objectiveName, objectiveData] of Object.entries(
+              objectives
+            )) {
+              html += `<div class="objective-card">
+                                <div class="objective-header"><i class="material-icons">track_changes</i><span class="objective-title">${objectiveName}</span></div>
+                                <div class="annual-chart-grid">${objectiveData
+                                  .map(createAnnualBarChartCard)
+                                  .join("")}</div>
+                             </div>`;
+            }
+            html += `</div>`; // Close strategy-group-card
+          }
+        } else {
+          html = formatNoResults(
+            `ไม่พบเป้าหมาย 5 ปี`,
+            `สำหรับช่วงแผน ${selectedPlan}`
+          );
+        }
+        document.getElementById("content-area").innerHTML = html;
+        document.querySelectorAll(".annual-chart-canvas").forEach((canvas) => {
+          const kpiId = canvas.dataset.kpiId;
+          const kpiMasterInfo = uniqueKpisForPlan.find(
+            (kpi) => kpi.kpiId === kpiId
+          );
+          const kpiFullData = allData.find((d) => d.kpiId === kpiId);
+          if (kpiFullData && kpiFullData.annualData) {
+            renderAnnualBarChart(canvas, kpiFullData, kpiMasterInfo);
+          } else {
+            console.warn(`Annual data not found for KPI ID: ${kpiId}`);
+            canvas.parentElement.innerHTML =
+              '<p class="no-results" style="font-size: 0.9rem; padding: 2rem 0;">ไม่มีข้อมูลรายปี</p>';
+          }
+        });
+      }
+
+      function createHospitalHtml(data) {
+        const objectives = groupBy(data, "objectiveName");
+        let html = "";
+        for (const [name, objectiveData] of Object.entries(objectives)) {
+          html += `<div class="objective-card"><div class="objective-header"><i class="material-icons">track_changes</i><span class="objective-title">${name}</span></div><div class="kpi-grid">${createKpiCardsHtml(
+            objectiveData
+          )}</div></div>`;
+        }
+        return html;
+      }
+
+      function createCountryHtml(data) {
+        const plans = groupBy(data, "planName");
+        let html = "";
+        for (const [name, planData] of Object.entries(plans)) {
+          if (!name || name === "undefined") continue;
+          html += `<div class="plan-card"><div class="plan-header"><i class="material-icons">assignment</i><span class="plan-title">${name}</span></div><div style="padding: 0 1.5rem 1.5rem 1.5rem;">${createHospitalHtml(
+            planData
+          )}</div></div>`;
+        }
+        return html;
+      }
+
+      function createKpiCardsHtml(kpiDataSet) {
+        const kpisById = groupBy(kpiDataSet, "kpiId");
+        let html = "";
+        for (const kpiId in kpisById) {
+          const kpiData = kpisById[kpiId];
+          const kpi = kpiData[0];
+          const cardClass = kpi.isActive === "Cancelled" ? "cancelled" : "";
+          html += `<div class="gauge-card ${cardClass}"><div class="gauge-header"><div class="gauge-kpi-title">${
+            kpi.kpiName
+          }</div><div class="gauge-kpi-owner">${
+            kpi.kpiTargetText || "N/A"
+          }</div><div class="gauge-kpi-owner">${
+            kpi.owner || "N/A"
+          }</div></div><div class="gauge-body"><div class="gauge-container"><canvas class="gauge-canvas" data-kpi-id="${
+            kpi.kpiId
+          }" id="gauge-canvas-${
+            kpi.kpiId
+          }"></canvas><div class="gauge-value" id="gauge-value-${
+            kpi.kpiId
+          }">-</div></div></div><div class="quarterly-content">${createQuarterlyView(
+            kpiData
+          )}</div></div>`;
+        }
+        return html;
+      }
+
+      function createQuarterlyView(kpiData) {
+        let viewHtml = '<div class="quarterly-grid">';
+        for (let i = 1; i <= 4; i++) {
+          const qData = kpiData.find((d) => d.quarter == i);
+          const resultText =
+            qData && qData.result !== null && qData.result !== ""
+              ? qData.result
+              : "-";
+          const targetText = qData?.quarterlyTarget ?? "-";
+          const status = qData?.status || "รอข้อมูล";
+          const color =
+            status === "ผ่าน"
+              ? "var(--green)"
+              : status === "ไม่ผ่าน"
+              ? "var(--red)"
+              : "var(--orange)";
+          viewHtml += `<div class="quarter-box"><div class="quarter-name">ไตรมาส ${i}</div><div class="quarter-details">เป้า: <span>${targetText}</span><br>ผล: <span style="font-weight:700; color:${color};">${resultText}</span></div></div>`;
+        }
+        return viewHtml + "</div>";
+      }
+
+      function createAnnualBarChartCard(kpi) {
+        const cardClass = kpi.isActive === "Cancelled" ? "cancelled" : "";
+        return `<div class="annual-kpi-card ${cardClass}">
+                    <h4 class="annual-kpi-title">${kpi.kpiName}</h4>
+                    <div class="annual-chart-container">
+                        <canvas class="annual-chart-canvas" data-kpi-id="${kpi.kpiId}"></canvas>
+                    </div>
+                </div>`;
+      }
+
+      function renderGaugeChart(canvas, kpiData) {
+        const latestData = kpiData
+          .filter((d) => d.result !== null && d.result !== "")
+          .sort((a, b) => b.quarter - a.quarter)[0];
+        const valueId = canvas.id.replace("canvas", "value");
+        const valueEl = document.getElementById(valueId);
+
+        if (!valueEl) {
+          console.error(`Gauge value element not found: #${valueId}`);
+          return;
+        }
+        if (!latestData || latestData.isActive === "Cancelled") {
+          valueEl.innerText = "-";
+          const ctx = canvas.getContext("2d");
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          return;
+        }
+        const { result, quarterlyTarget, calcLogic } = latestData;
+        const progressPercent = calculateProgress(
+          result,
+          quarterlyTarget,
+          calcLogic
+        );
+        const color =
+          progressPercent >= 100
+            ? CHART_COLORS.green
+            : progressPercent >= 70
+            ? CHART_COLORS.orange
+            : CHART_COLORS.red;
+        valueEl.innerText = `${progressPercent}%`;
+        valueEl.style.color = color;
+        activeCharts.push(
+          new Chart(canvas.getContext("2d"), {
+            type: "doughnut",
+            data: {
+              datasets: [
+                {
+                  data: [progressPercent, 100 - progressPercent],
+                  backgroundColor: [color, CHART_COLORS.grey],
+                  borderWidth: 0,
+                  circumference: 180,
+                  rotation: -90,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              cutout: "80%",
+              plugins: { tooltip: { enabled: false } },
+            },
+          })
+        );
+      }
+
+      function renderAnnualBarChart(canvas, kpiFullData, kpiMasterInfo) {
+        if (!kpiFullData || !Array.isArray(kpiFullData.annualData)) {
+          console.error(
+            `Annual data is missing or not an array for KPI ID: ${kpiMasterInfo?.kpiId}`
+          );
+          canvas.parentElement.innerHTML =
+            '<p class="no-results" style="font-size: 0.9rem; padding: 2rem 0;">ไม่มีข้อมูลรายปี</p>';
+          return;
+        }
+        const annualData = kpiFullData.annualData.sort(
+          (a, b) => a.Year - b.Year
+        );
+        const labels = annualData.map((d) => d.Year);
+        const targetData = annualData.map((d) => d.YearTarget);
+        const resultData = annualData.map((d) => d.YearResult);
+        const isCancelled = kpiMasterInfo?.isActive === "Cancelled";
+
+        activeCharts.push(
+          new Chart(canvas.getContext("2d"), {
+            type: "bar",
+            data: {
+              labels: labels,
+              datasets: [
+                {
+                  label: "ผลลัพธ์",
+                  data: resultData,
+                  backgroundColor: isCancelled
+                    ? CHART_COLORS.grey
+                    : CHART_COLORS.primary,
+                  borderRadius: 4,
+                },
+                {
+                  label: "เป้าหมาย",
+                  data: targetData,
+                  backgroundColor: CHART_COLORS.secondary,
+                  borderRadius: 4,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { position: "top", align: "end" } },
+              scales: { y: { beginAtZero: true } },
+            },
+          })
+        );
+      }
+
+      function renderSummaryDonutChart(canvasId, passed, failed) {
+        const canvasEl = document.getElementById(canvasId);
+        if (!canvasEl) {
+          console.error(`Summary chart canvas not found: #${canvasId}`);
+          return;
+        }
+        activeCharts.push(
+          new Chart(canvasEl.getContext("2d"), {
+            type: "doughnut",
+            data: {
+              datasets: [
+                {
+                  data: [passed, failed],
+                  backgroundColor: [CHART_COLORS.green, CHART_COLORS.red],
+                  borderWidth: 0,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              cutout: "70%",
+              plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false },
+              },
+            },
+          })
+        );
+      }
+
+      function calculateProgress(current, target, logic = "GTE") {
+        const currentValue = parseFloat(current);
+        const targetValue = parseFloat(target);
+        if (isNaN(currentValue)) return 0;
+        if (logic === "EQ0") return currentValue === 0 ? 100 : 0;
+        if (logic === "EQT")
+          return current?.toString().trim() === target?.toString().trim()
+            ? 100
+            : 0;
+        if (isNaN(targetValue) || targetValue === 0)
+          return logic === "GTE" && currentValue > 0 ? 100 : 0;
+        let percent =
+          logic === "LTE"
+            ? (targetValue / currentValue) * 100
+            : (currentValue / targetValue) * 100;
+        if (logic === "LTE" && currentValue <= targetValue) percent = 100;
+        return Math.max(0, Math.min(Math.round(percent), 100));
+      }
+
+      function groupBy(data, key) {
+        return data.reduce((acc, item) => {
+          const group = item[key];
+          if (!acc[group]) acc[group] = [];
+          acc[group].push(item);
+          return acc;
+        }, {});
+      }
+
+      function formatNoResults(title, subtitle) {
+        return `<div class="no-results"><i class="material-icons">info_outline</i><h3>${title}</h3><p>${subtitle}</p></div>`;
+      }
+    </script>
+  </body>
+</html>

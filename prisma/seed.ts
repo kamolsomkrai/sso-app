@@ -6,6 +6,7 @@ import {
   ProcurementType,
 } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
+import seedKpiData from "./seed-kpi";
 
 const prisma = new PrismaClient();
 
@@ -866,7 +867,16 @@ async function main() {
 
   console.log(`✅ Created ${await prisma.auditLog.count()} audit logs`);
 
-  console.log("🎉 Database seeding completed successfully!");
+  // --- 8. Seed KPI Data ---
+  console.log("\n🎯 Seeding KPI System...");
+  try {
+    await seedKpiData();
+  } catch (error) {
+    console.error("❌ KPI seeding error:", error);
+    // Continue even if KPI seed fails
+  }
+
+  console.log("\n🎉 Database seeding completed successfully!");
   console.log("📊 Summary:");
   console.log(`   👥 Users: ${await prisma.user.count()}`);
   console.log(`   📂 Categories: ${await prisma.budgetCategory.count()}`);

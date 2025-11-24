@@ -25,8 +25,36 @@ export interface CategoryDataPoint {
   color: string;
 }
 
+export interface QuarterlyDataPoint {
+  name: string; // "Q1", "Q2", etc.
+  revenue: number;
+  expense: number;
+  planRevenue: number;
+  planExpense: number;
+}
+
+export interface TreemapNode {
+  name: string;
+  size: number; // Plan Amount
+  value: number; // Actual Amount
+  utilization: number; // %
+  children?: TreemapNode[];
+}
+
+export interface HeatmapDataPoint {
+  id: string;
+  category: string;
+  data: {
+    x: string; // Month
+    y: number; // Variance %
+    value: number; // Actual Amount
+  }[];
+}
+
 export interface DashboardSummary {
   fiscalYear: number;
+  period: 'month' | 'quarter';
+  level: number;
   lastUpdated: Date;
   kpis: {
     totalRevenue: KpiMetric;
@@ -34,7 +62,7 @@ export interface DashboardSummary {
     netResult: KpiMetric;
   };
   charts: {
-    monthlyTrend: ChartDataPoint[];
+    monthlyTrend: ChartDataPoint[] | QuarterlyDataPoint[];
     expenseBreakdown: CategoryDataPoint[];
     revenueBreakdown: CategoryDataPoint[];
   };
